@@ -1,0 +1,469 @@
+import secrets
+import time
+from collections import defaultdict, deque
+from datetime import datetime, timedelta
+from typing import Annotated
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session as DBSession
+
+from app.core.config import settings
+from app.core.security import UnsafeURL, public_url, validate_url
+from app.db import get_session
+from app.models import (
+    Analysis,
+    Article,
+    Event,
+    EventArticle,
+    Industry,
+    Job,
+    Metric,
+    Notification,
+    Source,
+    now,
+)
+from app.notifications.adapters import recipient_key
+from app.schemas import IndustryInput, ReportRequest, SourceInput
+from app.services.pipeline import collector
+from app.services.queue import enqueue
+
+app = FastAPI(title="AI Intelligence Hub", version="0.1.0", docs_url="/docs")
+DB = Annotated[DBSession, Depends(get_session)]
+_requests: dict[str, deque] = defaultdict(deque)
+
+
+def authorize(request: Request, x_api_key: str = Header(default="")) -> None:
+    key = settings().admin_api_key
+    if not key or not secrets.compare_digest(key, x_api_key):
+        raise HTTPException(401, "需要管理员 API Key")
+    # Local process rate limiter; network reverse proxy should enforce production global quotas.
+    identity = request.client.host if request.client else "local"
+    queue = _requests[identity]
+    clock = time.monotonic()
+    while queue and queue[0] < clock - 60:
+        queue.popleft()
+    if len(queue) >= 240:
+        raise HTTPException(429, "请求过于频繁", headers={"Retry-After": "60"})
+    queue.append(clock)
+
+
+@app.exception_handler(ValidationError)
+async def validation_error(request, exc):
+    return JSONResponse(status_code=422, content={"detail": "配置字段验证失败"})
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error(request, exc):
+    return JSONResponse(status_code=409, content={"detail": "名称或唯一字段已存在，或数据仍被引用"})
+
+
+@app.exception_handler(UnsafeURL)
+async def unsafe_error(request, exc):
+    return JSONResponse(status_code=422, content={"detail": "仅允许可解析的公网 HTTP(S) 地址"})
+
+
+@app.exception_handler(Exception)
+async def unexpected_error(request, exc):
+    return JSONResponse(status_code=500, content={"detail": "内部错误，请查看任务状态"})
+
+
+def row(item) -> dict:
+    data = {c.name: getattr(item, c.name) for c in item.__table__.columns}
+    if isinstance(item, Source):
+        data["url"] = (
+            public_url(item.url) if "key=" in item.url.lower() or "token=" in item.url.lower() else item.url
+        )
+    return data
+
+
+def required(db: DBSession, model, identity: str):
+    item = db.get(model, identity)
+    if not item:
+        raise HTTPException(404, "记录不存在")
+    return item
+
+
+def validate_industries(db, ids):
+    if any(db.get(Industry, identity) is None for identity in ids):
+        raise HTTPException(422, "行业 ID 不存在")
+
+
+def commit(db, item):
+    db.add(item)
+    db.commit()
+    return row(item)
+
+
+@app.get("/api/v1/health/live")
+def live():
+    return {"status": "alive"}
+
+
+@app.get("/api/v1/health/ready")
+def ready(db: DB):
+    db.execute(select(func.count()).select_from(Industry))
+    return {"status": "ready", "auth_configured": bool(settings().admin_api_key)}
+
+
+AUTH = [Depends(authorize)]
+
+
+@app.get("/api/v1/industries", dependencies=AUTH)
+def industries(db: DB):
+    return [row(v) for v in db.scalars(select(Industry))]
+
+
+@app.post("/api/v1/industries", dependencies=AUTH, status_code=201)
+def add_industry(body: IndustryInput, db: DB):
+    return commit(db, Industry(**body.model_dump()))
+
+
+@app.patch("/api/v1/industries/{identity}", dependencies=AUTH)
+def edit_industry(identity: str, body: dict, db: DB):
+    item = required(db, Industry, identity)
+    merged = IndustryInput.model_validate(
+        {**{k: getattr(item, k) for k in IndustryInput.model_fields}, **body}
+    )
+    for key in body:
+        if key not in IndustryInput.model_fields:
+            raise HTTPException(422, "未知字段")
+        setattr(item, key, getattr(merged, key))
+    return commit(db, item)
+
+
+@app.delete("/api/v1/industries/{identity}", dependencies=AUTH)
+def delete_industry(identity: str, db: DB):
+    required(db, Industry, identity)
+    # JSON lists are portable in MVP; cleanup references atomically.
+    for model in [Source, Article]:
+        for item in db.scalars(select(model)):
+            if identity in item.industry_ids:
+                item.industry_ids = [v for v in item.industry_ids if v != identity]
+    db.delete(db.get(Industry, identity))
+    db.commit()
+    return {"deleted": identity}
+
+
+@app.get("/api/v1/sources", dependencies=AUTH)
+def sources(db: DB):
+    return [row(v) for v in db.scalars(select(Source))]
+
+
+@app.post("/api/v1/sources", dependencies=AUTH, status_code=201)
+def add_source(body: SourceInput, db: DB):
+    validate_url(body.url)
+    validate_industries(db, body.industry_ids)
+    return commit(db, Source(**body.model_dump()))
+
+
+@app.get("/api/v1/sources/{identity}", dependencies=AUTH)
+def get_source(identity: str, db: DB):
+    return row(required(db, Source, identity))
+
+
+@app.patch("/api/v1/sources/{identity}", dependencies=AUTH)
+def edit_source(identity: str, body: dict, db: DB):
+    item = required(db, Source, identity)
+    from pydantic import ValidationError
+
+    try:
+        merged = SourceInput.model_validate(
+            {**{k: getattr(item, k) for k in SourceInput.model_fields}, **body}
+        )
+    except ValidationError:
+        raise HTTPException(422, "来源配置无效") from None
+    validate_url(merged.url)
+    validate_industries(db, merged.industry_ids)
+    if merged.url != item.url:
+        item.etag = item.last_modified = None
+    for key in body:
+        if key not in SourceInput.model_fields:
+            raise HTTPException(422, "未知字段")
+        setattr(item, key, getattr(merged, key))
+    return commit(db, item)
+
+
+@app.delete("/api/v1/sources/{identity}", dependencies=AUTH)
+def delete_source(identity: str, db: DB):
+    item = required(db, Source, identity)
+    # Keep source evidence for archived articles; deletion is a documented soft delete.
+    item.enabled, item.status = False, "deleted"
+    return commit(db, item)
+
+
+@app.post("/api/v1/sources/{identity}/run", dependencies=AUTH)
+def run_source(identity: str, db: DB):
+    item = required(db, Source, identity)
+    if not item.enabled:
+        raise HTTPException(409, "请先启用来源")
+    job = enqueue(db, "collect", "collect:" + identity, source_id=identity)
+    db.commit()
+    return {"queued": bool(job), "job_id": job.id if job else None}
+
+
+@app.post("/api/v1/sources/{identity}/test", dependencies=AUTH)
+def test_source(identity: str, db: DB):
+    item = required(db, Source, identity)
+    try:
+        result = collector(item).collect(item.url, {})
+        return {"ok": True, "entries": len(result.entries)}
+    except Exception as exc:
+        return {"ok": False, "error": type(exc).__name__}
+
+
+@app.get("/api/v1/articles/search", dependencies=AUTH)
+@app.get("/api/v1/articles", dependencies=AUTH)
+def articles(
+    db: DB,
+    q: str = Query("", max_length=200),
+    industry_id: str | None = None,
+    source_id: str | None = None,
+    language: str | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    sort: str = Query("published_at", pattern="^(published_at|collected_at|importance_score)$"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+):
+    query = select(Article)
+    if q:
+        needle = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        query = query.where(
+            or_(
+                Article.title.ilike(needle, escape="\\"),
+                Article.summary.ilike(needle, escape="\\"),
+                Article.content.ilike(needle, escape="\\"),
+            )
+        )
+    if source_id:
+        query = query.where(Article.source_id == source_id)
+    if language:
+        query = query.where(Article.language == language)
+    for value, op in [(start, Article.published_at.__ge__), (end, Article.published_at.__le__)]:
+        if value:
+            if value.tzinfo is None:
+                raise HTTPException(422, "时间参数必须包含时区")
+            query = query.where(op(value))
+    if industry_id:
+        # JSON array containment on SQLite via json_each, avoiding substring collisions.
+        from sqlalchemy import exists
+
+        terms = func.json_each(Article.industry_ids).table_valued("value")
+        query = query.where(exists(select(1).select_from(terms).where(terms.c.value == industry_id)))
+    if sort == "importance_score":
+        query = query.join(EventArticle, EventArticle.article_id == Article.id).join(
+            Event, Event.id == EventArticle.event_id
+        )
+        order = Event.importance_score
+    else:
+        order = getattr(Article, sort)
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+    items = []
+    for article in db.scalars(query.order_by(order.desc(), Article.id).offset(offset).limit(limit)):
+        item = row(article)
+        item.pop("raw_payload", None)
+        event = db.scalar(
+            select(Event)
+            .join(EventArticle, Event.id == EventArticle.event_id)
+            .where(EventArticle.article_id == article.id)
+        )
+        item["importance_score"] = event.importance_score if event else 0
+        items.append(item)
+    return {"items": items, "total": total, "offset": offset, "limit": limit}
+
+
+@app.get("/api/v1/articles/{identity}", dependencies=AUTH)
+def article_detail(identity: str, db: DB):
+    item = row(required(db, Article, identity))
+    item["analyses"] = [
+        row(v)
+        for v in db.scalars(
+            select(Analysis).where(Analysis.article_id == identity).order_by(Analysis.created_at.desc())
+        )
+    ]
+    return item
+
+
+@app.get("/api/v1/events", dependencies=AUTH)
+def events(
+    db: DB,
+    min_score: int = Query(0, ge=0, le=100),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+):
+    query = select(Event).where(Event.importance_score >= min_score)
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+    return {
+        "items": [
+            row(v) for v in db.scalars(query.order_by(Event.first_seen_at.desc()).offset(offset).limit(limit))
+        ],
+        "total": total,
+    }
+
+
+@app.get("/api/v1/events/{identity}", dependencies=AUTH)
+def event_detail(identity: str, db: DB):
+    item = row(required(db, Event, identity))
+    item["articles"] = event_articles(identity, db)
+    item["notifications"] = [
+        row(v) for v in db.scalars(select(Notification).where(Notification.event_id == identity))
+    ]
+    return item
+
+
+@app.get("/api/v1/events/{identity}/articles", dependencies=AUTH)
+def event_articles(identity: str, db: DB):
+    required(db, Event, identity)
+    return [
+        {k: v for k, v in row(a).items() if k != "raw_payload"}
+        for a in db.scalars(
+            select(Article)
+            .join(EventArticle, Article.id == EventArticle.article_id)
+            .where(EventArticle.event_id == identity)
+        )
+    ]
+
+
+@app.get("/api/v1/notifications/channels", dependencies=AUTH)
+def channels():
+    return [
+        {"channel": name, "enabled": getattr(settings(), f"{name}_enabled")}
+        for name in ["telegram", "feishu"]
+    ]
+
+
+@app.get("/api/v1/notifications", dependencies=AUTH)
+def notifications(db: DB, offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200)):
+    return [
+        row(v)
+        for v in db.scalars(
+            select(Notification).order_by(Notification.created_at.desc()).offset(offset).limit(limit)
+        )
+    ]
+
+
+@app.post("/api/v1/notifications/test", dependencies=AUTH)
+def notification_test(db: DB, channel: str = Query(pattern="^(telegram|feishu)$")):
+    if not getattr(settings(), f"{channel}_enabled"):
+        raise HTTPException(409, "渠道未配置")
+    event = Event(
+        title="AIH 渠道测试（非真实新闻）", summary="管理员手动通知测试", importance_score=0, status="test"
+    )
+    db.add(event)
+    db.flush()
+    note = Notification(
+        event_id=event.id,
+        channel=channel,
+        recipient=recipient_key(channel, settings()),
+        notification_type="test",
+        payload={
+            "level": "TEST",
+            "title": event.title,
+            "summary": event.summary,
+            "score": 0,
+            "url": "https://github.com/TZ-WYmail/AI-Intelligence-Hub",
+        },
+    )
+    db.add(note)
+    db.flush()
+    enqueue(db, "notify", "notify:" + note.id, {"notification_id": note.id})
+    db.commit()
+    return {"queued": True, "notification_id": note.id}
+
+
+@app.get("/api/v1/jobs", dependencies=AUTH)
+def jobs(db: DB, offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200)):
+    return [
+        row(v) for v in db.scalars(select(Job).order_by(Job.scheduled_at.desc()).offset(offset).limit(limit))
+    ]
+
+
+@app.get("/api/v1/metrics", dependencies=AUTH)
+def metrics(db: DB, limit: int = Query(100, ge=1, le=1000)):
+    return [row(v) for v in db.scalars(select(Metric).order_by(Metric.recorded_at.desc()).limit(limit))]
+
+
+@app.get("/api/v1/stats/overview", dependencies=AUTH)
+def overview(db: DB):
+    since = now() - timedelta(hours=24)
+
+    def count(model, *conditions):
+        return db.scalar(select(func.count()).select_from(model).where(*conditions))
+
+    checked = db.scalar(select(func.coalesce(func.sum(Source.checked_count), 0)))
+    success = db.scalar(select(func.coalesce(func.sum(Source.success_count), 0)))
+    return {
+        "articles_24h": count(Article, Article.collected_at >= since),
+        "events_24h": count(Event, Event.first_seen_at >= since, Event.status != "test"),
+        "critical_24h": count(
+            Event, Event.first_seen_at >= since, Event.importance_score >= settings().critical_alert_threshold
+        ),
+        "active_sources": count(Source, Source.enabled.is_(True)),
+        "collection_success_rate": success / checked if checked else None,
+        "last_collection": db.scalar(select(func.max(Source.last_success_at))),
+        "backlog": count(Job, Job.status.in_(["pending", "retry_wait", "running"])),
+        "ai_calls": count(Analysis, Analysis.provider == "openai-compatible"),
+        "ai_input_tokens": db.scalar(select(func.coalesce(func.sum(Analysis.input_tokens), 0))),
+        "ai_output_tokens": db.scalar(select(func.coalesce(func.sum(Analysis.output_tokens), 0))),
+        "ai_estimated_cost_cny": db.scalar(select(func.coalesce(func.sum(Analysis.estimated_cost), 0))),
+        "scheduler_last_seen": db.scalar(
+            select(func.max(Metric.recorded_at)).where(Metric.metric_name == "scheduler_heartbeat")
+        ),
+        "worker_last_seen": db.scalar(
+            select(func.max(Metric.recorded_at)).where(Metric.metric_name == "worker_heartbeat")
+        ),
+        "timezone": settings().app_timezone,
+        "ai_enabled": settings().ai_enabled,
+    }
+
+
+@app.get("/api/v1/settings", dependencies=AUTH)
+def safe_settings():
+    cfg = settings()
+    return {
+        "timezone": cfg.app_timezone,
+        "ai_enabled": cfg.ai_enabled,
+        "ai_model": cfg.ai_model,
+        "monthly_ai_budget_cny": cfg.monthly_ai_budget_cny,
+        "critical_alert_threshold": cfg.critical_alert_threshold,
+        "important_alert_threshold": cfg.important_alert_threshold,
+        "raw_retention_days": cfg.raw_retention_days,
+        "notification_retention_days": cfg.notification_retention_days,
+        "ai_key_configured": bool(cfg.ai_api_key),
+        "channels": channels(),
+    }
+
+
+@app.post("/api/v1/reports", dependencies=AUTH)
+def report(body: ReportRequest, db: DB):
+    if body.start.tzinfo is None or body.end.tzinfo is None or body.end <= body.start:
+        raise HTTPException(422, "请提供带时区且有效的时间范围")
+    data = articles(
+        db,
+        q="",
+        industry_id=body.industry_id,
+        source_id=None,
+        language=None,
+        start=body.start,
+        end=body.end,
+        sort="importance_score",
+        offset=0,
+        limit=200,
+    )
+    lines = [
+        "# AIH 情报简报",
+        f"来源发布时间：{body.start.isoformat()} 至 {body.end.isoformat()}",
+        f"生成时间：{now().isoformat()}",
+        "规则汇总；AI 观点不代表已验证事实。最多列出 200 条。",
+        "",
+    ]
+    for item in data["items"]:
+        lines += [
+            f"- [{item['title']}]({item['original_url']}) · {item['importance_score']}分 · unverified",
+            f"  {item['summary'][:300]}",
+        ]
+    return {"markdown": "\n".join(lines), "total": data["total"]}

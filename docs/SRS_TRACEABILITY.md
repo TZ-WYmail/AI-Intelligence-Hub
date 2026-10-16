@@ -1,0 +1,24 @@
+# SRS V1.0 实现对照（2026-10-16）
+
+|需求|状态|实现/证据|
+|---|---|---|
+|FR-001 来源管理|主体实现|管理页面/API、周期/状态/禁用/测试、JSON 导入导出；config/sources.yaml；使用条款由管理员复审|
+|FR-002 行业管理|实现|动态行业、关键词/排除词、企业/人物、渠道和阈值；首次配置在 YAML|
+|FR-003 采集|主体实现|RSS/Atom 与 GDELT 适配器、持久化任务、ETag/Last-Modified、Retry-After、超时/体积/退避；GDELT 实网未通过|
+|FR-004 清洗|主体实现|HTML 清理、日期 UTC、URL、基础中英文语言检测、缺时间标记、原始条目；复杂语言检测/全文提取未做|
+|FR-005 去重|MVP 实现|来源 external_id、canonical URL、内容哈希唯一约束；多来源事件聚合与语义去重待做|
+|FR-006 AI|主体实现|Protocol、兼容 API、Schema、来源事实绑定、Token/预算、失败保留规则结果和重试；真实模型/自动翻译未验证|
+|FR-007 评分|MVP 实现|配置化五维权重、阈值、简短依据；独立确认固定 0、未实现特殊强制升级规则|
+|FR-008 通知|主体实现|Telegram/飞书、持久化幂等键、P0 优先/P1 合并/P2 归档、静默、重试、测试；真实投递与飞书签名待做|
+|FR-009 Web|主体实现|八页 Streamlit、FastAPI 鉴权、过滤/排序/分页、日志/指标；设置需 .env 修改，图形统计待补|
+|FR-010 简报|接口实现|带时间范围/生成时间/原文链接的 Markdown 规则汇总；自动 AI 日报周报属于 P1|
+|数据完整性|实现|数据库唯一约束、外键、事务、WAL、UTC TypeDecorator、Alembic 冻结 DDL|
+|任务恢复|实现|CAS 领取、数据库 outbox、持久化重试状态/上限、租约过期恢复；单 Worker|
+|安全|主体实现|业务 API Key、公网 DNS 校验/IP 固定、重定向重验、超时/体积、清理 HTML、隔离提示词、脱敏日志、env 忽略|
+|容量与延迟|合成测试完成|100 来源/3000 文章压测见 benchmark.json；不能替代真实网络/AI SLA|
+|Linux 部署|本机验证|宿主 Ubuntu 26.04.1，Python 3.12.14；Ubuntu24.04需单独验证|
+|Docker 四服务|见验收报告|构建、探针、重启与数据保留结果记录在 ACCEPTANCE.md|
+|真实来源≥15|快照验证完成|20 个订阅 / 5 个平台，22 个候选；2 个失败禁用；不代表20个独立出版机构|
+|GitHub 同步|SSH|现有 origin 由 HTTPS 改为 git@github.com:TZ-WYmail/AI-Intelligence-Hub.git|
+
+所有未完成内容及边界集中列于 LIMITATIONS.md。未把模拟消息/模拟 AI 成功作为实网验证通过。

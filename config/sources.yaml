@@ -1,0 +1,666 @@
+- name: NVIDIA Newsroom
+  source_type: rss
+  url: https://nvidianews.nvidia.com/releases.xml
+  industry_ids:
+  - semiconductor
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.nvidia.com/en-us/about-nvidia/rss/
+  terms_note: 'NVIDIA: free personal noncommercial information use only; retain attribution'
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 20
+  latest_published_at: '2026-10-16T08:00:00+00:00'
+  checked_at: '2026-10-16T08:55:26.414114+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 15.69
+  terms_url: https://www.nvidia.com/en-us/about-nvidia/rss/
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: NVIDIA Blog
+  source_type: rss
+  url: https://feeds.feedburner.com/nvidiablog
+  industry_ids:
+  - ai
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.nvidia.com/en-us/about-nvidia/rss/
+  terms_note: 'NVIDIA: free personal noncommercial information use only; retain attribution'
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: false
+  status: unverified
+  entries: 0
+  checked_at: '2026-10-16T08:55:41.410733+00:00'
+  error: ConnectTimeout
+  elapsed_seconds: 30.69
+- name: NVIDIA Developer
+  source_type: rss
+  url: https://developer.nvidia.com/blog/feed
+  industry_ids:
+  - ai
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.nvidia.com/en-us/about-nvidia/rss/
+  terms_note: 'NVIDIA: free personal noncommercial information use only; retain attribution'
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 100
+  latest_published_at: '2026-10-15T18:01:00+00:00'
+  checked_at: '2026-10-16T08:55:26.611223+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 15.89
+  terms_url: https://www.nvidia.com/en-us/about-nvidia/rss/
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: NASA News
+  source_type: rss
+  url: https://www.nasa.gov/news-release/feed/
+  industry_ids:
+  - manufacturing
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.nasa.gov/rss-feeds/
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 10
+  latest_published_at: '2026-10-16T04:05:00+00:00'
+  checked_at: '2026-10-16T08:55:14.247287+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 3.52
+  terms_url: https://www.nasa.gov/nasa-brand-center/images-and-media/
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: NASA Technology
+  source_type: rss
+  url: https://www.nasa.gov/technology/feed/
+  industry_ids:
+  - manufacturing
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.nasa.gov/rss-feeds/
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 10
+  latest_published_at: '2026-10-15T04:01:00+00:00'
+  checked_at: '2026-10-16T08:55:16.141515+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 1.89
+  terms_url: https://www.nasa.gov/nasa-brand-center/images-and-media/
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: NASA Aeronautics
+  source_type: rss
+  url: https://www.nasa.gov/aeronautics/feed/
+  industry_ids:
+  - manufacturing
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.nasa.gov/rss-feeds/
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 10
+  latest_published_at: '2026-10-10T14:18:59+00:00'
+  checked_at: '2026-10-16T08:55:17.202932+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 1.06
+  terms_url: https://www.nasa.gov/nasa-brand-center/images-and-media/
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: NASA Station
+  source_type: rss
+  url: https://www.nasa.gov/missions/station/feed/
+  industry_ids:
+  - manufacturing
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.nasa.gov/rss-feeds/
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 10
+  latest_published_at: '2026-10-15T17:30:00+00:00'
+  checked_at: '2026-10-16T08:55:17.731956+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 0.53
+  terms_url: https://www.nasa.gov/nasa-brand-center/images-and-media/
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: NASA Artemis
+  source_type: rss
+  url: https://www.nasa.gov/missions/artemis/feed/
+  industry_ids:
+  - manufacturing
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.nasa.gov/rss-feeds/
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 10
+  latest_published_at: '2026-10-15T14:57:21+00:00'
+  checked_at: '2026-10-16T08:55:18.164181+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 0.43
+  terms_url: https://www.nasa.gov/nasa-brand-center/images-and-media/
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: EIA Today in Energy
+  source_type: rss
+  url: https://www.eia.gov/rss/todayinenergy.xml
+  industry_ids:
+  - energy
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.eia.gov/tools/rssfeeds/
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 17
+  latest_published_at: '2026-10-15T14:00:00+00:00'
+  checked_at: '2026-10-16T08:55:19.196560+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 1.03
+  terms_url: https://www.eia.gov/about/copyrights_reuse.php
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: EIA Press
+  source_type: rss
+  url: https://www.eia.gov/rss/press_rss.xml
+  industry_ids:
+  - energy
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.eia.gov/tools/rssfeeds/
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 12
+  latest_published_at: '2026-10-06T17:00:00+00:00'
+  checked_at: '2026-10-16T08:55:20.110936+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 0.91
+  terms_url: https://www.eia.gov/about/copyrights_reuse.php
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: EIA Gas Diesel
+  source_type: rss
+  url: https://www.eia.gov/petroleum/gasdiesel/includes/gas_diesel_rss.xml
+  industry_ids:
+  - energy
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.eia.gov/tools/rssfeeds/
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 1
+  latest_published_at: '2026-10-14T14:31:35+00:00'
+  checked_at: '2026-10-16T08:55:21.600500+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 1.49
+  terms_url: https://www.eia.gov/about/copyrights_reuse.php
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: ECB Press
+  source_type: rss
+  url: https://www.ecb.europa.eu/rss/press.html
+  industry_ids:
+  - finance
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.ecb.europa.eu/home/html/rss.en.html
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 15
+  latest_published_at: '2026-10-14T00:00:00+00:00'
+  checked_at: '2026-10-16T08:55:26.639968+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 5.04
+  terms_url: https://www.ecb.europa.eu/services/using-our-site/disclaimer/html/index.en.html
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: ECB Blog
+  source_type: rss
+  url: https://www.ecb.europa.eu/rss/blog.html
+  industry_ids:
+  - finance
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.ecb.europa.eu/home/html/rss.en.html
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 15
+  latest_published_at: '2026-10-08T09:00:00+00:00'
+  checked_at: '2026-10-16T08:55:27.910625+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 1.5
+  terms_url: https://www.ecb.europa.eu/services/using-our-site/disclaimer/html/index.en.html
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: ECB Statistics
+  source_type: rss
+  url: https://www.ecb.europa.eu/rss/statpress.html
+  industry_ids:
+  - finance
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.ecb.europa.eu/home/html/rss.en.html
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 15
+  latest_published_at: '2026-10-08T11:30:00+00:00'
+  checked_at: '2026-10-16T08:55:28.099454+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 1.49
+  terms_url: https://www.ecb.europa.eu/services/using-our-site/disclaimer/html/index.en.html
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: ECB Publications
+  source_type: rss
+  url: https://www.ecb.europa.eu/rss/pub.html
+  industry_ids:
+  - finance
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.ecb.europa.eu/home/html/rss.en.html
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 15
+  latest_published_at: '2026-10-15T09:00:00+00:00'
+  checked_at: '2026-10-16T08:55:28.076347+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 1.44
+  terms_url: https://www.ecb.europa.eu/services/using-our-site/disclaimer/html/index.en.html
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: ECB Working Papers
+  source_type: rss
+  url: https://www.ecb.europa.eu/rss/wppub.html
+  industry_ids:
+  - finance
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.ecb.europa.eu/home/html/rss.en.html
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 15
+  latest_published_at: '2026-10-15T09:00:00+00:00'
+  checked_at: '2026-10-16T08:55:29.903871+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 1.99
+  terms_url: https://www.ecb.europa.eu/services/using-our-site/disclaimer/html/index.en.html
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: ECB Research Bulletin
+  source_type: rss
+  url: https://www.ecb.europa.eu/rss/rbu.html
+  industry_ids:
+  - finance
+  poll_interval_seconds: 1800
+  trust_level: 0.9
+  language: en
+  evidence_url: https://www.ecb.europa.eu/home/html/rss.en.html
+  terms_note: Publisher provides this feed for subscription; personal metadata/summary
+    reader only; no full text redistribution. Numeric rate limit not found; conservative
+    30m polling.
+  authentication: none
+  terms_review: personal RSS subscription; commercial reuse not authorized by this
+    verification
+  enabled: true
+  status: verified
+  entries: 15
+  latest_published_at: '2026-10-08T06:00:00+00:00'
+  checked_at: '2026-10-16T08:55:32.123428+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 4.05
+  terms_url: https://www.ecb.europa.eu/services/using-our-site/disclaimer/html/index.en.html
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: GDELT AI
+  source_type: gdelt
+  url: https://api.gdeltproject.org/api/v2/doc/doc?query=artificial%20intelligence&mode=artlist&format=json&maxrecords=50&timespan=1d
+  industry_ids:
+  - ai
+  poll_interval_seconds: 900
+  trust_level: 0.6
+  language: en
+  evidence_url: https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/
+  authentication: none
+  terms_note: Discovery metadata only; linked publisher rights apply; no numeric quota
+    verified.
+  terms_review: manual review required
+  enabled: false
+  status: unverified
+  entries: 0
+  checked_at: '2026-10-16T08:55:40.703974+00:00'
+  error: RemoteError
+  elapsed_seconds: 12.6
+- name: arXiv cs.AI
+  source_type: rss
+  url: https://rss.arxiv.org/rss/cs.AI
+  industry_ids:
+  - ai
+  poll_interval_seconds: 3600
+  trust_level: 0.75
+  language: en
+  evidence_url: https://info.arxiv.org/help/rss.html
+  authentication: none
+  terms_note: Metadata CC0; full text rights vary. Single connection, max 1 request/3s
+    across all arXiv feeds. Daily publication feed, not breaking news.
+  terms_review: https://info.arxiv.org/help/api/tou.html
+  enabled: true
+  status: verified
+  entries: 453
+  latest_published_at: '2026-10-16T04:00:00+00:00'
+  checked_at: '2026-10-16T08:55:47.257789+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 2.75
+  terms_url: https://info.arxiv.org/help/api/tou.html
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: arXiv cs.LG
+  source_type: rss
+  url: https://rss.arxiv.org/rss/cs.LG
+  industry_ids:
+  - ai
+  poll_interval_seconds: 3600
+  trust_level: 0.75
+  language: en
+  evidence_url: https://info.arxiv.org/help/rss.html
+  authentication: none
+  terms_note: Metadata CC0; full text rights vary. Single connection, max 1 request/3s
+    across all arXiv feeds. Daily publication feed, not breaking news.
+  terms_review: https://info.arxiv.org/help/api/tou.html
+  enabled: true
+  status: verified
+  entries: 467
+  latest_published_at: '2026-10-16T04:00:00+00:00'
+  checked_at: '2026-10-16T08:55:52.600724+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 2.24
+  terms_url: https://info.arxiv.org/help/api/tou.html
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: arXiv cs.RO
+  source_type: rss
+  url: https://rss.arxiv.org/rss/cs.RO
+  industry_ids:
+  - manufacturing
+  poll_interval_seconds: 3600
+  trust_level: 0.75
+  language: en
+  evidence_url: https://info.arxiv.org/help/rss.html
+  authentication: none
+  terms_note: Metadata CC0; full text rights vary. Single connection, max 1 request/3s
+    across all arXiv feeds. Daily publication feed, not breaking news.
+  terms_review: https://info.arxiv.org/help/api/tou.html
+  enabled: true
+  status: verified
+  entries: 149
+  latest_published_at: '2026-10-16T04:00:00+00:00'
+  checked_at: '2026-10-16T08:55:56.853100+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 1.15
+  terms_url: https://info.arxiv.org/help/api/tou.html
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution
+- name: arXiv q-bio
+  source_type: rss
+  url: https://rss.arxiv.org/rss/q-bio
+  industry_ids:
+  - health
+  poll_interval_seconds: 3600
+  trust_level: 0.75
+  language: en
+  evidence_url: https://info.arxiv.org/help/rss.html
+  authentication: none
+  terms_note: Metadata CC0; full text rights vary. Single connection, max 1 request/3s
+    across all arXiv feeds. Daily publication feed, not breaking news.
+  terms_review: https://info.arxiv.org/help/api/tou.html
+  enabled: true
+  status: verified
+  entries: 32
+  latest_published_at: '2026-10-16T04:00:00+00:00'
+  checked_at: '2026-10-16T08:56:00.553168+00:00'
+  fields:
+  - title
+  - link
+  - summary
+  - published_at
+  - raw_payload
+  update_delay: Not measured across time; snapshot only
+  error: null
+  elapsed_seconds: 0.6
+  terms_url: https://info.arxiv.org/help/api/tou.html
+  usage_scope: Personal metadata/summary subscription; retain source links and dates;
+    no full-text redistribution

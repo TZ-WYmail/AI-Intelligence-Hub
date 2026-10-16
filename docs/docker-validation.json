@@ -1,0 +1,38 @@
+{
+  "before_restart": {
+    "articles_24h": 186,
+    "events_24h": 186,
+    "critical_24h": 0,
+    "active_sources": 20,
+    "collection_success_rate": 1.0,
+    "last_collection": "2026-10-16T09:13:21.682807+00:00",
+    "backlog": 10,
+    "ai_calls": 0,
+    "ai_input_tokens": 0,
+    "ai_output_tokens": 0,
+    "ai_estimated_cost_cny": 0.0,
+    "scheduler_last_seen": "2026-10-16T09:13:18.612274+00:00",
+    "worker_last_seen": "2026-10-16T09:13:00.755325+00:00",
+    "timezone": "Asia/Shanghai",
+    "ai_enabled": false
+  },
+  "after_restart": {
+    "articles_24h": 219,
+    "events_24h": 215,
+    "critical_24h": 0,
+    "active_sources": 20,
+    "collection_success_rate": 1.0,
+    "last_collection": "2026-10-16T09:13:46.388883+00:00",
+    "backlog": 12,
+    "ai_calls": 0,
+    "ai_input_tokens": 0,
+    "ai_output_tokens": 0,
+    "ai_estimated_cost_cny": 0.0,
+    "scheduler_last_seen": "2026-10-16T09:13:45.726129+00:00",
+    "worker_last_seen": "2026-10-16T09:13:37.296328+00:00",
+    "timezone": "Asia/Shanghai",
+    "ai_enabled": false
+  },
+  "dashboard_status": 200,
+  "python": "3.12.12"
+}

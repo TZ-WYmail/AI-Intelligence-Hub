@@ -1,0 +1,12 @@
+# Optional build-only override for trusted loopback proxy on this Linux host.
+services:
+  init:
+    build: {context: ., network: host}
+  api:
+    build: {context: ., network: host}
+  worker:
+    build: {context: ., network: host}
+  scheduler:
+    build: {context: ., network: host}
+  dashboard:
+    build: {context: ., network: host}

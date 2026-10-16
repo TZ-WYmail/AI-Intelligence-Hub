@@ -1,0 +1,7 @@
+weights:
+  trust: 0.25
+  impact: 0.30
+  freshness: 0.15
+  relevance: 0.20
+  confirmation: 0.10
+major_terms: [breakthrough, launches, acquisition, regulation, approval, releases, 重大, 突破, 发布, 收购, 获批]

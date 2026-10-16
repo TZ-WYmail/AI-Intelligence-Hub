@@ -1,0 +1,64 @@
+name: aih
+x-common: &common
+  image: aih:local
+  build: .
+  env_file: .env
+  environment:
+    DATABASE_URL: sqlite:///./data/aih.db
+    API_BASE_URL: http://api:8000
+  volumes:
+    - aih-data:/srv/aih/data
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+services:
+  init:
+    <<: *common
+    command: sh -c "alembic upgrade head && python -m scripts.bootstrap"
+    restart: "no"
+  api:
+    <<: *common
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      init: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+  worker:
+    <<: *common
+    command: python -m app.workers.run
+    healthcheck:
+      test: [CMD, python, -m, scripts.health, worker]
+      interval: 30s
+      start_period: 30s
+      retries: 5
+    depends_on:
+      api: {condition: service_healthy}
+  scheduler:
+    <<: *common
+    command: python -m app.scheduler.run
+    healthcheck:
+      test: [CMD, python, -m, scripts.health, scheduler]
+      interval: 30s
+      start_period: 30s
+      retries: 5
+    depends_on:
+      api: {condition: service_healthy}
+  dashboard:
+    <<: *common
+    command: streamlit run dashboard/Home.py --server.address=0.0.0.0 --server.port=8501 --browser.gatherUsageStats=false --server.headless=true
+    ports: ["127.0.0.1:8501:8501"]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health')"]
+      interval: 15s
+      retries: 5
+    depends_on:
+      api: {condition: service_healthy}
+volumes:
+  aih-data:

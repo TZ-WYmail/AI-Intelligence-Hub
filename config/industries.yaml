@@ -1,0 +1,8 @@
+- {id: ai, name: AI与人工智能, slug: ai, keywords: [AI, artificial intelligence, machine learning, OpenAI, DeepSeek, 人工智能, 大模型], companies: [OpenAI, Anthropic, Google DeepMind]}
+- {id: semiconductor, name: 半导体与芯片, slug: semiconductor, keywords: [semiconductor, chip, GPU, 半导体, 芯片], companies: [NVIDIA, TSMC, Intel, ASML]}
+- {id: finance, name: 金融与宏观经济, slug: finance, keywords: [economy, inflation, monetary, interest rate, 金融, 通胀, 央行]}
+- {id: energy, name: 新能源与汽车, slug: energy, keywords: [energy, battery, electric vehicle, solar, 新能源, 汽车, 电池]}
+- {id: health, name: 医疗与生物科技, slug: health, keywords: [health, medicine, clinical, drug, 医疗, 生物, 药物]}
+- {id: business, name: 商业与创业, slug: business, keywords: [startup, funding, acquisition, business, 创业, 融资, 收购]}
+- {id: policy, name: 政策与国际贸易, slug: policy, keywords: [policy, regulation, tariff, trade, 政策, 监管, 贸易]}
+- {id: manufacturing, name: 先进制造, slug: manufacturing, keywords: [manufacturing, robot, aerospace, technology, 制造, 机器人, 航天]}
