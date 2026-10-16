@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -34,7 +34,13 @@ if not key:
 def api(path: str, method: str = "GET", body=None, params=None):
     try:
         response = httpx.request(
-            method, base + "/api/v1/" + path, headers={"X-API-Key": key}, json=body, params=params, timeout=90
+            method,
+            base + "/api/v1/" + path,
+            headers={"X-API-Key": key},
+            json=body,
+            params=params,
+            timeout=90,
+            trust_env=False,
         )
         if response.status_code >= 400:
             st.error(f"请求失败 ({response.status_code})：{response.json().get('detail', '')}")
@@ -66,7 +72,7 @@ industry_names = {v["id"]: v["name"] for v in industries}
 if page == "概览":
 
     @st.fragment(run_every="20s")
-    def overview():
+    def overview_metrics():
         stats = api("stats/overview")
         columns = st.columns(4)
         for col, label, field in zip(
@@ -76,6 +82,16 @@ if page == "概览":
             strict=False,
         ):
             col.metric(label, stats[field])
+
+    overview_metrics()
+    from visuals import render_visuals
+
+    render_visuals(api)
+    st.divider()
+
+    @st.fragment(run_every="20s")
+    def recent_news():
+        stats = api("stats/overview")
         left, right = st.columns([2, 1])
         with left:
             st.subheader("最新情报")
@@ -98,7 +114,7 @@ if page == "概览":
             st.metric("累计估算 AI 费用", f"¥{stats['ai_estimated_cost_cny']:.4f}")
             st.caption("延迟指标需基于实际采集和通知数据评估。")
 
-    overview()
+    recent_news()
 
 elif page == "实时新闻":
     from news import render_news
@@ -280,35 +296,9 @@ elif page == "数据源管理":
             st.rerun()
 
 elif page == "简报":
-    st.caption("每日简报自动归档，复用已有分析，不额外调用模型或发送消息。")
-    if st.button("生成昨日日报"):
-        result = api("reports/daily", "POST")
-        st.success("报告已归档，请在下方查看。" if result.get("report_id") else "已加入队列，稍后刷新查看。")
-    archives = api("reports")
-    if archives:
-        titles = {item["id"]: item["title"] for item in archives}
-        chosen = st.selectbox("已归档简报", list(titles), format_func=titles.get)
-        report = api("reports/" + chosen)
-        st.download_button("下载每日简报", report["markdown"], "aih-daily.md", mime="text/markdown")
-        st.markdown(report["markdown"], unsafe_allow_html=False)
-    else:
-        st.info("尚无归档简报。每天按设定时间生成，也可手动生成昨日报告。")
-    with st.expander("自定义时间范围"):
-        start = st.date_input("起始日期", datetime.now(tz).date() - timedelta(days=1))
-        end = st.date_input("结束日期（包含当天）", datetime.now(tz).date())
-        if st.button("生成 Markdown 简报"):
-            result = api(
-                "reports",
-                "POST",
-                {
-                    "start": datetime.combine(start, datetime.min.time(), tzinfo=tz).isoformat(),
-                    "end": datetime.combine(
-                        end + timedelta(days=1), datetime.min.time(), tzinfo=tz
-                    ).isoformat(),
-                },
-            )
-            st.download_button("下载自定义简报", result["markdown"], "aih-report.md")
-            st.markdown(result["markdown"], unsafe_allow_html=False)
+    from briefs import render_briefs
+
+    render_briefs(api, tz)
 
 elif page == "系统设置":
     a, b = st.columns(2)

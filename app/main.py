@@ -542,6 +542,13 @@ def overview(db: DB):
     }
 
 
+@app.get("/api/v1/stats/analytics", dependencies=AUTH)
+def visual_analytics(db: DB, days: int = Query(7, ge=1, le=30)):
+    from app.services.analytics import analytics
+
+    return analytics(db, days)
+
+
 @app.get("/api/v1/settings", dependencies=AUTH)
 def safe_settings():
     cfg = settings()

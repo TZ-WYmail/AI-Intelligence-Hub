@@ -22,6 +22,7 @@ app/processing/normalizer.py
 app/processing/scorer.py
 app/scheduler/run.py
 app/schemas.py
+app/services/analytics.py
 app/services/maintenance.py
 app/services/pipeline.py
 app/services/queue.py
@@ -30,11 +31,16 @@ app/workers/run.py
 compose.build-local.yaml
 compose.yaml
 config/industries.yaml
+config/regions.yaml
 config/rules.yaml
 config/source_candidates.yaml
 config/sources.yaml
 dashboard/Home.py
+dashboard/assets/README.md
+dashboard/assets/world-borders.json
+dashboard/briefs.py
 dashboard/news.py
+dashboard/visuals.py
 data/.gitkeep
 docs/ACCEPTANCE.md
 docs/LIMITATIONS.md
@@ -45,6 +51,7 @@ docs/SRS_TRACEABILITY.md
 docs/STAGE2.md
 docs/STAGE3.md
 docs/STAGE4.md
+docs/VISUAL_DASHBOARD.md
 docs/benchmark.json
 docs/docker-validation.json
 docs/source-discovery.jsonl
@@ -52,6 +59,7 @@ docs/source-validation.json
 docs/stage2-validation.json
 docs/stage3-validation.json
 docs/stage4-validation.json
+docs/visual-validation.json
 migrations/env.py
 migrations/versions/0001_initial.py
 migrations/versions/0002_reading_digests.py
@@ -76,4 +84,5 @@ tests/test_processing.py
 tests/test_reader_workspace.py
 tests/test_reading_maintenance.py
 tests/test_reliability.py
+tests/test_visual_reports.py
 uv.lock

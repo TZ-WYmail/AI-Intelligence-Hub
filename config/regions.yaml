@@ -1,0 +1,28 @@
+# Text mentions only. Coordinates are approximate regional centres, not event locations.
+- {id: US, name: 美国, lat: 39, lon: -98, aliases: [United States, U.S., USA, 美国]}
+- {id: CN, name: 中国, lat: 35, lon: 104, aliases: [China, Chinese, 中国]}
+- {id: GB, name: 英国, lat: 54, lon: -2, aliases: [United Kingdom, Britain, British, 英国]}
+- {id: DE, name: 德国, lat: 51, lon: 10, aliases: [Germany, German, 德国]}
+- {id: FR, name: 法国, lat: 47, lon: 2, aliases: [France, French, 法国]}
+- {id: JP, name: 日本, lat: 36, lon: 138, aliases: [Japan, Japanese, 日本]}
+- {id: KR, name: 韩国, lat: 36, lon: 128, aliases: [South Korea, 韩国]}
+- {id: IN, name: 印度, lat: 22, lon: 79, aliases: [India, Indian, 印度]}
+- {id: CA, name: 加拿大, lat: 57, lon: -106, aliases: [Canada, Canadian, 加拿大]}
+- {id: AU, name: 澳大利亚, lat: -25, lon: 134, aliases: [Australia, Australian, 澳大利亚]}
+- {id: RU, name: 俄罗斯, lat: 61, lon: 96, aliases: [Russia, Russian, 俄罗斯]}
+- {id: UA, name: 乌克兰, lat: 49, lon: 32, aliases: [Ukraine, Ukrainian, 乌克兰]}
+- {id: BR, name: 巴西, lat: -14, lon: -52, aliases: [Brazil, Brazilian, 巴西]}
+- {id: NL, name: 荷兰, lat: 52, lon: 5, aliases: [Netherlands, Dutch, 荷兰]}
+- {id: CH, name: 瑞士, lat: 47, lon: 8, aliases: [Switzerland, Swiss, 瑞士]}
+- {id: SG, name: 新加坡, lat: 1.35, lon: 103.82, aliases: [Singapore, 新加坡]}
+- {id: TW, name: 台湾地区, lat: 23.7, lon: 121, aliases: [Taiwan, 台湾, 臺灣]}
+- {id: IL, name: 以色列, lat: 31, lon: 35, aliases: [Israel, Israeli, 以色列]}
+- {id: SA, name: 沙特阿拉伯, lat: 24, lon: 45, aliases: [Saudi Arabia, 沙特]}
+- {id: AE, name: 阿联酋, lat: 24, lon: 54, aliases: [United Arab Emirates, UAE, 阿联酋]}
+- {id: IT, name: 意大利, lat: 43, lon: 12, aliases: [Italy, Italian, 意大利]}
+- {id: ES, name: 西班牙, lat: 40, lon: -4, aliases: [Spain, Spanish, 西班牙]}
+- {id: ID, name: 印度尼西亚, lat: -2, lon: 118, aliases: [Indonesia, Indonesian, 印度尼西亚]}
+- {id: VN, name: 越南, lat: 16, lon: 107, aliases: [Vietnam, Vietnamese, 越南]}
+- {id: MX, name: 墨西哥, lat: 24, lon: -102, aliases: [Mexico, Mexican, 墨西哥]}
+- {id: ZA, name: 南非, lat: -29, lon: 24, aliases: [South Africa, 南非]}
+- {id: EU, name: 欧盟（区域）, lat: 50, lon: 12, aliases: [European Union, 欧盟]}

@@ -1,0 +1,28 @@
+{
+  "checked_at": "2026-10-16T17:38:35.189673+00:00",
+  "tests_passed": 51,
+  "ruff_check": "passed",
+  "ruff_format": "passed",
+  "docker_build": "passed",
+  "article_analytics": {
+    "articles": 1216,
+    "region_evidence_articles": 62,
+    "unknown_region_articles": 1154,
+    "active_regions": 14,
+    "request_seconds": 0.936,
+    "trend_total": 1216,
+    "importance_total": 1216
+  },
+  "daily_brief": {
+    "selected_entries": 200,
+    "default_page_size": 5,
+    "pages": 40,
+    "browser_page_2_verified": true
+  },
+  "browser_globe_drag_rotation_verified": true,
+  "container_homepage_and_brief_paging_smoke": "passed",
+  "additional_ai_calls_from_analytics_and_reports": 0,
+  "notifications_enabled": false,
+  "ai_daily_request_limit": 20,
+  "monthly_ai_budget_cny": 20.0
+}
