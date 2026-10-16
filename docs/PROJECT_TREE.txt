@@ -36,10 +36,12 @@ docs/OPERATIONS.md
 docs/PROJECT_TREE.txt
 docs/SOURCE_POLICY.md
 docs/SRS_TRACEABILITY.md
+docs/STAGE2.md
 docs/benchmark.json
 docs/docker-validation.json
 docs/source-discovery.jsonl
 docs/source-validation.json
+docs/stage2-validation.json
 migrations/env.py
 migrations/versions/0001_initial.py
 pyproject.toml
@@ -56,6 +58,7 @@ tests/test_adapters_security.py
 tests/test_api.py
 tests/test_dashboard.py
 tests/test_migrations_backup.py
+tests/test_news_reading.py
 tests/test_pipeline.py
 tests/test_processing.py
 tests/test_reliability.py

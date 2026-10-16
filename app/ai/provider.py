@@ -24,25 +24,28 @@ class OpenAIProvider:
             "Use only allowed industry ids; separate facts from speculative impact. Schema: "
             + json.dumps(AIResult.model_json_schema(), ensure_ascii=False)
         )
+        payload = {
+            "model": cfg.ai_model,
+            "messages": [
+                {"role": "system", "content": system},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {"allowed_industry_ids": industry_ids, "untrusted_article": article}
+                    ),
+                },
+            ],
+            "max_tokens": cfg.ai_max_output_tokens,
+            "response_format": {"type": "json_object"},
+        }
+        if cfg.ai_thinking_mode != "provider_default":
+            payload["thinking"] = {"type": cfg.ai_thinking_mode}
         with httpx.Client(timeout=cfg.ai_timeout, trust_env=False) as client:
             with client.stream(
                 "POST",
                 cfg.ai_api_base_url.rstrip("/") + "/chat/completions",
                 headers={"Authorization": "Bearer " + cfg.ai_api_key},
-                json={
-                    "model": cfg.ai_model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {
-                            "role": "user",
-                            "content": json.dumps(
-                                {"allowed_industry_ids": industry_ids, "untrusted_article": article}
-                            ),
-                        },
-                    ],
-                    "max_tokens": cfg.ai_max_output_tokens,
-                    "response_format": {"type": "json_object"},
-                },
+                json=payload,
             ) as response:
                 response.raise_for_status()
                 body = bytearray()
@@ -51,6 +54,8 @@ class OpenAIProvider:
                     if len(body) > cfg.max_response_bytes:
                         raise ValueError("AI_RESPONSE_TOO_LARGE")
         data = json.loads(body)
+        if data["choices"][0].get("finish_reason") == "length":
+            raise ValueError("AI_OUTPUT_TRUNCATED")
         result = AIResult.model_validate_json(data["choices"][0]["message"]["content"])
         result.verification_status = "unverified"
         result.industry_ids = [v for v in result.industry_ids if v in industry_ids]

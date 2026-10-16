@@ -1,0 +1,32 @@
+{
+  "validated_at": "2026-10-16T16:31:01.236042+00:00",
+  "model": "deepseek-flash",
+  "thinking_mode": "disabled",
+  "input_tokens": 749,
+  "output_tokens": 401,
+  "estimated_cost_cny": 0.01952,
+  "price_basis": "Conservative configured CNY rates (10 input / 30 output per million); not provider invoice",
+  "verification_status": "unverified",
+  "chinese_search_verified": true,
+  "duplicate_request_reused": true,
+  "notifications_enabled": false,
+  "daily_request_limit": 20,
+  "monthly_budget_cny": 20.0,
+  "system_snapshot": {
+    "articles_24h": 1176,
+    "events_24h": 1176,
+    "critical_24h": 0,
+    "active_sources": 20,
+    "collection_success_rate": 0.9158249158249159,
+    "last_collection": "2026-10-16T16:10:11.316411+00:00",
+    "backlog": 0,
+    "ai_calls": 1,
+    "ai_input_tokens": 749,
+    "ai_output_tokens": 401,
+    "ai_estimated_cost_cny": 0.01952,
+    "scheduler_last_seen": "2026-10-16T16:31:30.885630+00:00",
+    "worker_last_seen": "2026-10-16T16:31:31.162500+00:00",
+    "timezone": "Asia/Shanghai",
+    "ai_enabled": true
+  }
+}

@@ -86,3 +86,21 @@ def test_notification_adapters(monkeypatch, channel, status):
     else:
         with pytest.raises(RemoteError):
             adapter.send(payload)
+
+
+@pytest.mark.parametrize("mode", ["provider_default", "disabled", "enabled"])
+def test_thinking_mode_and_truncated_output(monkeypatch, mode):
+    def handler(request):
+        body = json.loads(request.content)
+        if mode == "provider_default":
+            assert "thinking" not in body
+        else:
+            assert body["thinking"] == {"type": mode}
+        return httpx.Response(
+            200, json={"choices": [{"finish_reason": "length", "message": {"content": "{}"}}]}
+        )
+
+    original = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: original(transport=httpx.MockTransport(handler)))
+    with pytest.raises(ValueError, match="AI_OUTPUT_TRUNCATED"):
+        OpenAIProvider(Settings(_env_file=None, ai_thinking_mode=mode)).analyze({"id": "a"}, [])

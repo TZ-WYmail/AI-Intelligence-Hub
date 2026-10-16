@@ -228,8 +228,24 @@ def articles(
     sort: str = Query("published_at", pattern="^(published_at|collected_at|importance_score)$"),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
+    analysis_status: str = Query("all", pattern="^(all|ai|rules|failed)$"),
 ):
     query = select(Article)
+    from sqlalchemy import exists
+
+    completed_ai = exists(
+        select(Analysis.id).where(
+            Analysis.article_id == Article.id,
+            Analysis.provider == "openai-compatible",
+            Analysis.status == "completed",
+        )
+    )
+    if analysis_status == "ai":
+        query = query.where(completed_ai)
+    elif analysis_status == "rules":
+        query = query.where(~completed_ai)
+    elif analysis_status == "failed":
+        query = query.where(Article.processing_status == "ai_retry_wait")
     if q:
         needle = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         query = query.where(
@@ -237,6 +253,21 @@ def articles(
                 Article.title.ilike(needle, escape="\\"),
                 Article.summary.ilike(needle, escape="\\"),
                 Article.content.ilike(needle, escape="\\"),
+                exists(
+                    select(Analysis.id).where(
+                        Analysis.article_id == Article.id,
+                        Analysis.provider == "openai-compatible",
+                        Analysis.status == "completed",
+                        or_(
+                            func.json_extract(Analysis.analysis_json, "$.summary_zh").ilike(
+                                needle, escape="\\"
+                            ),
+                            func.json_extract(Analysis.analysis_json, "$.impact_analysis").ilike(
+                                needle, escape="\\"
+                            ),
+                        ),
+                    )
+                ),
             )
         )
     if source_id:
@@ -262,16 +293,40 @@ def articles(
     else:
         order = getattr(Article, sort)
     total = db.scalar(select(func.count()).select_from(query.subquery()))
+    page = list(db.scalars(query.order_by(order.desc(), Article.id).offset(offset).limit(limit)))
+    ids = [article.id for article in page]
+    event_map = {
+        article_id: event
+        for article_id, event in db.execute(
+            select(EventArticle.article_id, Event)
+            .join(Event, Event.id == EventArticle.event_id)
+            .where(EventArticle.article_id.in_(ids))
+        )
+    }
+    ai_map = {}
+    for analysis in db.scalars(
+        select(Analysis)
+        .where(
+            Analysis.article_id.in_(ids),
+            Analysis.provider == "openai-compatible",
+            Analysis.status == "completed",
+        )
+        .order_by(Analysis.created_at.desc(), Analysis.id)
+    ):
+        ai_map.setdefault(analysis.article_id, analysis)
     items = []
-    for article in db.scalars(query.order_by(order.desc(), Article.id).offset(offset).limit(limit)):
+    for article in page:
         item = row(article)
         item.pop("raw_payload", None)
-        event = db.scalar(
-            select(Event)
-            .join(EventArticle, Event.id == EventArticle.event_id)
-            .where(EventArticle.article_id == article.id)
+        event = event_map.get(article.id)
+        analysis = ai_map.get(article.id)
+        item.update(
+            importance_score=event.importance_score if event else 0,
+            verification_status=event.verification_status if event else "unverified",
+            event_id=event.id if event else None,
+            ai_summary_zh=analysis.analysis_json.get("summary_zh") if analysis else None,
+            ai_model=analysis.model if analysis else None,
         )
-        item["importance_score"] = event.importance_score if event else 0
         items.append(item)
     return {"items": items, "total": total, "offset": offset, "limit": limit}
 
@@ -286,6 +341,25 @@ def article_detail(identity: str, db: DB):
         )
     ]
     return item
+
+
+@app.post("/api/v1/articles/{identity}/analyze", dependencies=AUTH)
+def analyze_article(identity: str, db: DB):
+    required(db, Article, identity)
+    if not settings().ai_enabled:
+        raise HTTPException(409, "AI 未启用，请先完成服务配置")
+    done = db.scalar(
+        select(Analysis.id).where(
+            Analysis.article_id == identity,
+            Analysis.provider == "openai-compatible",
+            Analysis.status == "completed",
+        )
+    )
+    if done:
+        return {"queued": False, "already_analyzed": True, "job_id": None}
+    job = enqueue(db, "analyze", "analyze:" + identity, {"article_id": identity})
+    db.commit()
+    return {"queued": bool(job), "already_analyzed": False, "job_id": job.id if job else None}
 
 
 @app.get("/api/v1/events", dependencies=AUTH)
@@ -428,6 +502,9 @@ def safe_settings():
         "timezone": cfg.app_timezone,
         "ai_enabled": cfg.ai_enabled,
         "ai_model": cfg.ai_model,
+        "ai_thinking_mode": cfg.ai_thinking_mode,
+        "ai_daily_request_limit": cfg.ai_daily_request_limit,
+        "ai_timeout": cfg.ai_timeout,
         "monthly_ai_budget_cny": cfg.monthly_ai_budget_cny,
         "critical_alert_threshold": cfg.critical_alert_threshold,
         "important_alert_threshold": cfg.important_alert_threshold,
@@ -453,6 +530,7 @@ def report(body: ReportRequest, db: DB):
         sort="importance_score",
         offset=0,
         limit=200,
+        analysis_status="all",
     )
     lines = [
         "# AIH 情报简报",

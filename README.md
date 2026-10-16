@@ -4,6 +4,10 @@
 
 已实现真实 RSS → 标准化 → 三层精确去重 → 持久化文章/任务 → 行业分类 → 规则评分 → 可选 AI 分析 → 持久化告警 → Web 看板。当前交付为可运行的 MVP 工程，**尚不宣称 SRS 全部验收完成**：GDELT 实网验证失败、真实 AI/通知凭据未提供，持续运行观察尚未完成。
 
+## 当前进展（2026-10-17）
+
+第二阶段已接通 DeepSeek 官方 API，支持非思考模式；新闻列表支持 AI 中文摘要、摘要/影响搜索和按需详情。新增历史文章单篇分析队列入口。通知依用户要求保持关闭。当前真实 AI 的初始配额为每日20次、月估算20元，历史整库不会自动重跑。详见 [第二阶段交付记录](docs/STAGE2.md)。此前首版验收记录保留历史日期，其“尚未接通真实AI”状态已由本阶段更新。
+
 ## 快速开始
 
 需要 Python 3.12 和 uv；Docker 模式不要求宿主安装 Python。所有命令在仓库根目录执行。
@@ -75,6 +79,8 @@ AI_ENABLED=true
 AI_API_BASE_URL=https://your-provider.example/v1
 AI_API_KEY=your-secret
 AI_MODEL=your-model
+# DeepSeek 使用 disabled；其他供应商保留 provider_default
+AI_THINKING_MODE=provider_default
 AI_TIMEOUT=30
 AI_MAX_OUTPUT_TOKENS=1200
 AI_DAILY_REQUEST_LIMIT=100

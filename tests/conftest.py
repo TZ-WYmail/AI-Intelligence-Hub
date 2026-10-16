@@ -6,6 +6,25 @@ from app.db import make_engine
 from app.models import Base, Industry, Source
 
 
+@pytest.fixture(autouse=True)
+def isolate_real_credentials(monkeypatch):
+    for key, value in {
+        "AI_ENABLED": "false",
+        "AI_API_KEY": "mock",
+        "AI_MODEL": "mock",
+        "AI_THINKING_MODE": "provider_default",
+        "TELEGRAM_ENABLED": "false",
+        "FEISHU_ENABLED": "false",
+        "TELEGRAM_BOT_TOKEN": "mock",
+        "TELEGRAM_CHAT_ID": "mock",
+        "FEISHU_WEBHOOK_URL": "https://example.com/webhook",
+    }.items():
+        monkeypatch.setenv(key, value)
+    settings.cache_clear()
+    yield
+    settings.cache_clear()
+
+
 @pytest.fixture
 def db(tmp_path, monkeypatch):
     monkeypatch.setenv("ADMIN_API_KEY", "test-admin")

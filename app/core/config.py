@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import Field, model_validator
@@ -16,6 +17,7 @@ class Settings(BaseSettings):
     ai_api_base_url: str = "https://api.openai.com/v1"
     ai_api_key: str = ""
     ai_model: str = ""
+    ai_thinking_mode: Literal["provider_default", "disabled", "enabled"] = "provider_default"
     ai_timeout: float = Field(30, ge=1, le=90)
     ai_max_output_tokens: int = Field(1200, ge=100, le=8000)
     ai_daily_request_limit: int = Field(100, ge=0)

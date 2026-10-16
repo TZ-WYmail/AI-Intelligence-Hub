@@ -101,22 +101,23 @@ if page == "概览":
 
 elif page == "实时新闻":
     a, b, c, d = st.columns(4)
-    q = a.text_input("全文搜索")
+    q = a.text_input("搜索原文 / 中文摘要 / 影响分析")
     industry_id = b.selectbox(
         "行业", [""] + list(industry_names), format_func=lambda x: industry_names.get(x, "全部行业")
     )
     sort = c.selectbox(
         "排序",
-        ["published_at", "collected_at", "importance_score"],
+        ["collected_at", "published_at", "importance_score"],
         format_func=lambda x: {
             "published_at": "发布时间",
             "collected_at": "发现时间",
             "importance_score": "重要性",
         }[x],
     )
-    lang = d.selectbox("语言", ["", "zh", "en"])
-    source_list = api("sources")
-    source_names = {s["id"]: s["name"] for s in source_list}
+    lang = d.selectbox(
+        "语言", ["", "zh", "en"], format_func=lambda x: {"": "全部语言", "zh": "中文", "en": "英文"}[x]
+    )
+    source_names = {source["id"]: source["name"] for source in api("sources")}
     a, b, c = st.columns(3)
     source_id = a.selectbox(
         "来源", [""] + list(source_names), format_func=lambda x: source_names.get(x, "全部来源")
@@ -124,8 +125,17 @@ elif page == "实时新闻":
     days = b.selectbox(
         "发布时间范围", [0, 1, 7, 30], format_func=lambda x: "全部时间" if not x else f"最近 {x} 天"
     )
-    number = c.number_input("页码", min_value=1, value=1)
-    params = {"q": q, "sort": sort, "limit": 20, "offset": (number - 1) * 20}
+    analysis_status = c.selectbox(
+        "分析状态",
+        ["all", "ai", "rules", "failed"],
+        format_func=lambda x: {
+            "all": "全部",
+            "ai": "已有 AI 分析",
+            "rules": "暂无 AI 分析",
+            "failed": "AI 等待重试",
+        }[x],
+    )
+    params = {"q": q, "sort": sort, "limit": 20, "analysis_status": analysis_status}
     if industry_id:
         params["industry_id"] = industry_id
     if lang:
@@ -133,30 +143,89 @@ elif page == "实时新闻":
     if source_id:
         params["source_id"] = source_id
     if days:
-        params["start"] = (datetime.now(tz) - timedelta(days=days)).isoformat()
+        params["start"] = (
+            (datetime.now(tz) - timedelta(days=days)).replace(second=0, microsecond=0).isoformat()
+        )
+    # Filter changes reset pagination instead of leaving an empty later page.
+    import hashlib
+
+    page_key = hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()[:16]
+    number = st.number_input("页码", min_value=1, value=1, key="news_page_" + page_key)
+    params["offset"] = (number - 1) * 20
     data = api("articles", params=params)
-    st.caption(f"找到 {data['total']} 条文章")
-    for item in data["items"]:
-        with st.expander(f"{item['importance_score']}分 · {item['title']}"):
-            detail = api("articles/" + item["id"])
+    st.caption(f"共 {data['total']} 条 · 第 {number} 页 / 共 {max(1, (data['total'] + 19) // 20)} 页")
+    if not data["items"]:
+        st.info("当前没有符合条件的文章，请调整筛选或返回第 1 页。")
+
+    @st.dialog("情报详情", width="large")
+    def show_article(identity: str):
+        detail = api("articles/" + identity)
+        st.subheader(detail["title"])
+        st.caption(
+            f"发布 {localtime(detail['published_at'])} · 发现 {localtime(detail['collected_at'])} · {source_names.get(detail['source_id'], '')}"
+        )
+        st.caption("unverified · 本页事实提取尚未经过独立核验")
+        if detail["publication_time_inferred"]:
+            st.warning("来源未提供可靠发布时间，当前使用发现时间。")
+        st.markdown("**来源提供的原始摘要**")
+        st.write(detail["summary"] or "此来源仅提供标题。")
+        st.link_button("阅读原文 ↗", detail["original_url"])
+        completed = [
+            item for item in detail["analyses"] if item["status"] == "completed" and item["analysis_json"]
+        ]
+        latest_ai = next((item for item in completed if item["provider"] == "openai-compatible"), None)
+        latest_rules = next((item for item in completed if item["provider"] == "rules"), None)
+        if latest_ai:
+            result = latest_ai["analysis_json"]
+            st.divider()
+            st.markdown("**AI 中文摘要**")
+            st.write(result.get("summary_zh", ""))
             st.caption(
-                f"发布 {localtime(item['published_at'])} · 发现 {localtime(item['collected_at'])} · {source_names.get(item['source_id'], '')}"
+                f"模型：{latest_ai['model']} · 生成 {localtime(latest_ai['created_at'])} · 估算 ¥{latest_ai['estimated_cost']:.4f}"
             )
-            if item["publication_time_inferred"]:
-                st.warning("原文未提供可靠发布时间，当前时间为发现时间。")
-            st.write(item["summary"])
-            st.link_button("阅读原文 ↗", item["original_url"])
-            for analysis in detail["analyses"]:
-                if not analysis["analysis_json"]:
-                    continue
-                result = analysis["analysis_json"]
-                st.divider()
-                st.caption(f"{analysis['provider']} / {analysis['model']} / {analysis['status']}")
-                st.write("摘要：", result.get("summary_zh"))
-                st.write("事实提取（尚未独立验证）：", result.get("key_facts"))
-                st.write("AI 观点 / 潜在影响：", result.get("impact_analysis"))
-                st.write("评分依据：", result.get("reasoning_summary"))
-                st.json(result, expanded=False)
+            st.markdown("**事实提取 · 仅基于当前来源**")
+            for fact in result.get("key_facts", []):
+                st.write("• " + fact["text"])
+            st.markdown("**AI 观点 / 潜在影响**")
+            st.write(result.get("impact_analysis", ""))
+            st.write("分析依据：", result.get("reasoning_summary", ""))
+            st.caption("AI 意见不等于已确认事实；AI 自报评分不直接升级告警。")
+        else:
+            st.info("暂无成功的 AI 分析，规则评分和原文仍可阅读。")
+            if config["ai_enabled"] and st.button("分析这篇文章（计入 AI 配额）", key="analyze_" + identity):
+                queued = api("articles/" + identity + "/analyze", "POST")
+                st.success(
+                    "已加入分析队列；稍后刷新查看。" if queued["queued"] else "已有分析结果或正在处理中。"
+                )
+        if latest_rules:
+            with st.expander("规则评分依据"):
+                st.json(latest_rules["analysis_json"].get("score_dimensions", {}))
+        with st.expander("处理与来源证据"):
+            st.write("处理状态：", detail["processing_status"])
+            st.json(
+                {
+                    "article_id": identity,
+                    "original_url": detail["original_url"],
+                    "source_id": detail["source_id"],
+                    "raw_payload": detail["raw_payload"],
+                },
+                expanded=False,
+            )
+
+    for item in data["items"]:
+        with st.container(border=True):
+            st.caption(
+                f"{item['importance_score']} 分 · {source_names.get(item['source_id'], '')} · 发现 {localtime(item['collected_at'])} · {', '.join(industry_names.get(i, i) for i in item['industry_ids'])}"
+            )
+            st.write(item["title"])
+            if item.get("ai_summary_zh"):
+                st.write(item["ai_summary_zh"])
+                st.caption(f"AI 摘要 · {item['ai_model']} · 未独立核验")
+            else:
+                st.write(item["summary"][:450] or "来源仅提供标题，点击阅读原文。")
+                st.caption("来源摘要 · 暂无 AI 分析")
+            if st.button("查看详情与分析", key="detail_" + item["id"]):
+                show_article(item["id"])
 
 elif page == "重大事件":
     score = st.slider("最低重要性评分", 0, 100, 60)
