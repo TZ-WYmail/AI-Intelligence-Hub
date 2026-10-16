@@ -22,6 +22,7 @@ from app.models import (
 )
 from app.notifications.adapters import recipient_key
 from app.processing.classifier import classify
+from app.processing.event_matcher import matching_event
 from app.processing.normalizer import canonical, content_hash
 from app.processing.scorer import score
 from app.services.queue import enqueue
@@ -151,6 +152,10 @@ def analyze(session: Session, article_id: str, provider: Provider | None = None)
     previous = session.scalar(
         select(Analysis).where(Analysis.article_id == article.id).order_by(Analysis.created_at.desc())
     )
+    # A resumed durable job can find a request interrupted by process shutdown.
+    # Keep its reserved cost/quota because the provider may already have accepted it.
+    if previous and previous.provider == "openai-compatible" and previous.status == "started":
+        previous.status = "interrupted"
     event = session.get(Event, previous.event_id) if previous and previous.event_id else None
     result = {
         "industry_ids": article.industry_ids,
@@ -167,13 +172,25 @@ def analyze(session: Session, article_id: str, provider: Provider | None = None)
         "score_dimensions": dimensions,
     }
     if event is None:
-        event = Event(title=article.title, summary=result["summary_zh"], importance_score=rating)
-        session.add(event)
-        session.flush()
-        session.add(EventArticle(event_id=event.id, article_id=article.id))
+        event = matching_event(session, article)
+        linked = event is not None
+        if event is None:
+            event = Event(title=article.title, summary=result["summary_zh"], importance_score=rating)
+            session.add(event)
+            session.flush()
+        else:
+            event.last_updated_at = now()
+        session.add(
+            EventArticle(
+                event_id=event.id,
+                article_id=article.id,
+                relation_type="similar_title_unverified" if linked else "initial",
+            )
+        )
         session.add(Analysis(article_id=article.id, event_id=event.id, analysis_json=result))
         article.processing_status = "rules_completed"
-        create_notifications(session, event, article, source, industries, result)
+        if not linked:
+            create_notifications(session, event, article, source, industries, result)
         session.add(
             Metric(
                 metric_name="internal_processing_seconds",
@@ -239,5 +256,7 @@ def analyze(session: Session, article_id: str, provider: Provider | None = None)
     article.industry_ids = sorted(set(article.industry_ids + ai.industry_ids))
     article.processing_status = "completed"
     # AI opinion is displayed separately; cannot alone upgrade notification eligibility or verification.
-    event.summary = ai.summary_zh
-    event.event_type = ai.event_type
+    relation = session.get(EventArticle, (event.id, article.id))
+    if relation and relation.relation_type == "initial":
+        event.summary = ai.summary_zh
+        event.event_type = ai.event_type

@@ -30,6 +30,7 @@ from app.notifications.adapters import recipient_key
 from app.schemas import IndustryInput, ReadingPatch, ReportRequest, SourceInput
 from app.services.pipeline import collector
 from app.services.queue import enqueue
+from app.services.source_health import publication_health
 
 app = FastAPI(title="AI Intelligence Hub", version="0.1.0", docs_url="/docs")
 DB = Annotated[DBSession, Depends(get_session)]
@@ -150,7 +151,24 @@ def delete_industry(identity: str, db: DB):
 
 @app.get("/api/v1/sources", dependencies=AUTH)
 def sources(db: DB):
-    return [row(v) for v in db.scalars(select(Source))]
+    health = publication_health(db)
+    return [
+        {
+            **row(v),
+            **health.get(
+                v.id,
+                {
+                    "article_count": 0,
+                    "inferred_date_count": 0,
+                    "future_date_count": 0,
+                    "latest_published_at": None,
+                    "content_age_days": None,
+                    "freshness_status": "no_articles",
+                },
+            ),
+        }
+        for v in db.scalars(select(Source))
+    ]
 
 
 @app.post("/api/v1/sources", dependencies=AUTH, status_code=201)
@@ -391,12 +409,15 @@ def events(
 ):
     query = select(Event).where(Event.importance_score >= min_score)
     total = db.scalar(select(func.count()).select_from(query.subquery()))
-    return {
-        "items": [
-            row(v) for v in db.scalars(query.order_by(Event.first_seen_at.desc()).offset(offset).limit(limit))
-        ],
-        "total": total,
-    }
+    page = list(db.scalars(query.order_by(Event.last_updated_at.desc()).offset(offset).limit(limit)))
+    counts = dict(
+        db.execute(
+            select(EventArticle.event_id, func.count())
+            .where(EventArticle.event_id.in_([v.id for v in page]))
+            .group_by(EventArticle.event_id)
+        ).all()
+    )
+    return {"items": [{**row(v), "article_count": counts.get(v.id, 0)} for v in page], "total": total}
 
 
 @app.get("/api/v1/events/{identity}", dependencies=AUTH)
@@ -413,11 +434,17 @@ def event_detail(identity: str, db: DB):
 def event_articles(identity: str, db: DB):
     required(db, Event, identity)
     return [
-        {k: v for k, v in row(a).items() if k != "raw_payload"}
-        for a in db.scalars(
-            select(Article)
+        {
+            **{k: v for k, v in row(article).items() if k != "raw_payload"},
+            "source_name": source.name,
+            "relation_type": relation.relation_type,
+        }
+        for article, source, relation in db.execute(
+            select(Article, Source, EventArticle)
             .join(EventArticle, Article.id == EventArticle.article_id)
+            .join(Source, Source.id == Article.source_id)
             .where(EventArticle.event_id == identity)
+            .order_by(Article.published_at, Article.collected_at, Article.id)
         )
     ]
 

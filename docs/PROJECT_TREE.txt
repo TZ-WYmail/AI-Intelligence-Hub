@@ -17,6 +17,7 @@ app/main.py
 app/models.py
 app/notifications/adapters.py
 app/processing/classifier.py
+app/processing/event_matcher.py
 app/processing/normalizer.py
 app/processing/scorer.py
 app/scheduler/run.py
@@ -24,14 +25,17 @@ app/schemas.py
 app/services/maintenance.py
 app/services/pipeline.py
 app/services/queue.py
+app/services/source_health.py
 app/workers/run.py
 compose.build-local.yaml
 compose.yaml
 config/industries.yaml
 config/rules.yaml
+config/source_candidates.yaml
 config/sources.yaml
 dashboard/Home.py
 dashboard/news.py
+data/.gitkeep
 docs/ACCEPTANCE.md
 docs/LIMITATIONS.md
 docs/OPERATIONS.md
@@ -40,12 +44,14 @@ docs/SOURCE_POLICY.md
 docs/SRS_TRACEABILITY.md
 docs/STAGE2.md
 docs/STAGE3.md
+docs/STAGE4.md
 docs/benchmark.json
 docs/docker-validation.json
 docs/source-discovery.jsonl
 docs/source-validation.json
 docs/stage2-validation.json
 docs/stage3-validation.json
+docs/stage4-validation.json
 migrations/env.py
 migrations/versions/0001_initial.py
 migrations/versions/0002_reading_digests.py
@@ -62,6 +68,7 @@ tests/conftest.py
 tests/test_adapters_security.py
 tests/test_api.py
 tests/test_dashboard.py
+tests/test_event_linking.py
 tests/test_migrations_backup.py
 tests/test_news_reading.py
 tests/test_pipeline.py
@@ -70,4 +77,3 @@ tests/test_reader_workspace.py
 tests/test_reading_maintenance.py
 tests/test_reliability.py
 uv.lock
-data/.gitkeep

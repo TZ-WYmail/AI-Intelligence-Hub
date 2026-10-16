@@ -103,6 +103,9 @@ def candidates():
             terms_review="manual review required",
         )
     )
+    extra = Path("config/source_candidates.yaml")
+    if extra.exists():
+        rows.extend(yaml.safe_load(extra.read_text()) or [])
     return rows
 
 

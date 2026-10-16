@@ -106,19 +106,35 @@ elif page == "实时新闻":
     render_news(api, config, industry_names, tz, localtime)
 
 elif page == "重大事件":
+    st.caption("近似标题报道会保守关联到同一事件；报道数量不代表独立证实。历史事件暂不自动合并。")
     score = st.slider("最低重要性评分", 0, 100, 60)
     for event in api("events", params={"min_score": score})["items"]:
-        with st.expander(f"{event['importance_score']}分 · {event['title']}"):
+        with st.expander(
+            f"{event['importance_score']}分 · {event.get('article_count', 1)}篇报道 · {event['title']}"
+        ):
             detail = api("events/" + event["id"])
             st.write(event["summary"])
             st.caption(
                 f"验证状态：{event['verification_status']} · 首次发现 {localtime(event['first_seen_at'])}"
+                f" · 最近更新 {localtime(event['last_updated_at'])}"
             )
+            st.write("报道时间线")
             for article in detail["articles"]:
+                label = (
+                    "近似标题关联 · 未核实"
+                    if article.get("relation_type") == "similar_title_unverified"
+                    else "初始报道"
+                )
+                st.caption(
+                    f"{localtime(article['published_at'])} · {article.get('source_name', '')} · {label}"
+                )
                 st.write(article["title"])
-                st.link_button("来源原文", article["original_url"], key=article["id"])
-            st.write("通知记录")
-            st.dataframe(detail["notifications"], use_container_width=True)
+                if article.get("publication_time_inferred"):
+                    st.caption("来源未提供发布时间，以上时间为发现时间。")
+                st.link_button("阅读来源原文", article["original_url"], key=article["id"])
+            if detail["notifications"]:
+                with st.expander("通知记录"):
+                    st.dataframe(detail["notifications"], use_container_width=True)
 
 elif page == "行业管理":
     chosen = st.selectbox(
@@ -161,23 +177,35 @@ elif page == "行业管理":
 
 elif page == "数据源管理":
     sources = api("sources")
+    st.caption(
+        "抓取正常只代表请求成功。下表另外显示库中最近的有效发布时间；超过7天仅提示内容较旧，不代表来源故障。"
+    )
     st.dataframe(
         [
             {
-                k: s[k]
-                for k in [
-                    "name",
-                    "source_type",
-                    "enabled",
-                    "status",
-                    "poll_interval_seconds",
-                    "last_success_at",
-                    "last_error",
-                    "success_count",
-                    "checked_count",
-                ]
+                "来源": source["name"],
+                "启用": source["enabled"],
+                "采集状态": source["status"],
+                "更新间隔（分钟）": source["poll_interval_seconds"] // 60,
+                "成功率": f"{source['success_count'] / source['checked_count']:.0%}"
+                if source["checked_count"]
+                else "尚未采集",
+                "最近采集成功": localtime(source["last_success_at"]) if source["last_success_at"] else "—",
+                "最近内容发布": localtime(source.get("latest_published_at"))
+                if source.get("latest_published_at")
+                else "—",
+                "内容新鲜度": {
+                    "recent": "7天内",
+                    "older_than_7_days": "超过7天",
+                    "unknown": "日期未知",
+                    "no_articles": "尚无文章",
+                }.get(source.get("freshness_status"), "未知"),
+                "入库文章": source.get("article_count", 0),
+                "推定日期": source.get("inferred_date_count", 0),
+                "未来日期异常": source.get("future_date_count", 0),
+                "最近错误": source["last_error"],
             }
-            for s in sources
+            for source in sources
         ],
         use_container_width=True,
     )
