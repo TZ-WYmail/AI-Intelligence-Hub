@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     p1_batch_minutes: int = Field(60, ge=1)
     quiet_start_hour: int = Field(23, ge=0, le=23)
     quiet_end_hour: int = Field(7, ge=0, le=23)
+    backup_enabled: bool = True
+    backup_interval_hours: int = Field(24, ge=1, le=168)
+    backup_keep_count: int = Field(7, ge=1, le=90)
+    backup_directory: str = "./data/backups"
+    daily_digest_enabled: bool = True
+    daily_digest_hour: int = Field(8, ge=0, le=23)
     raw_retention_days: int = Field(30, ge=1)
     notification_retention_days: int = Field(180, ge=1)
     job_retention_days: int = Field(30, ge=1)

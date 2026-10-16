@@ -17,7 +17,7 @@ h1,h2,h3{letter-spacing:-.025em} [data-testid=stMetric]{background:#152033;paddi
 )
 
 st.sidebar.title("◈ AIH 情报中心")
-st.sidebar.caption("AI INTELLIGENCE HUB · V0.1")
+st.sidebar.caption("AI INTELLIGENCE HUB · 个人情报工作台")
 key = st.sidebar.text_input("管理员密钥", type="password", value="")
 base = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 # No key auto-filled or sent to browser. Enter explicitly per session.
@@ -55,10 +55,11 @@ def localtime(value):
     return datetime.fromisoformat(value).astimezone(tz).strftime("%m-%d %H:%M")
 
 
-st.title(page)
-st.caption(f"多行业实时监控 / {datetime.now(tz).strftime('%Y年%m月%d日')} / {config['timezone']}")
-if st.button("刷新数据", type="secondary"):
-    st.rerun()
+if not (page == "实时新闻" and st.session_state.get("_reader")):
+    st.title(page)
+    st.caption(f"多行业实时监控 / {datetime.now(tz).strftime('%Y年%m月%d日')} / {config['timezone']}")
+    if st.button("刷新数据", type="secondary"):
+        st.rerun()
 industries = api("industries")
 industry_names = {v["id"]: v["name"] for v in industries}
 
@@ -100,132 +101,9 @@ if page == "概览":
     overview()
 
 elif page == "实时新闻":
-    a, b, c, d = st.columns(4)
-    q = a.text_input("搜索原文 / 中文摘要 / 影响分析")
-    industry_id = b.selectbox(
-        "行业", [""] + list(industry_names), format_func=lambda x: industry_names.get(x, "全部行业")
-    )
-    sort = c.selectbox(
-        "排序",
-        ["collected_at", "published_at", "importance_score"],
-        format_func=lambda x: {
-            "published_at": "发布时间",
-            "collected_at": "发现时间",
-            "importance_score": "重要性",
-        }[x],
-    )
-    lang = d.selectbox(
-        "语言", ["", "zh", "en"], format_func=lambda x: {"": "全部语言", "zh": "中文", "en": "英文"}[x]
-    )
-    source_names = {source["id"]: source["name"] for source in api("sources")}
-    a, b, c = st.columns(3)
-    source_id = a.selectbox(
-        "来源", [""] + list(source_names), format_func=lambda x: source_names.get(x, "全部来源")
-    )
-    days = b.selectbox(
-        "发布时间范围", [0, 1, 7, 30], format_func=lambda x: "全部时间" if not x else f"最近 {x} 天"
-    )
-    analysis_status = c.selectbox(
-        "分析状态",
-        ["all", "ai", "rules", "failed"],
-        format_func=lambda x: {
-            "all": "全部",
-            "ai": "已有 AI 分析",
-            "rules": "暂无 AI 分析",
-            "failed": "AI 等待重试",
-        }[x],
-    )
-    params = {"q": q, "sort": sort, "limit": 20, "analysis_status": analysis_status}
-    if industry_id:
-        params["industry_id"] = industry_id
-    if lang:
-        params["language"] = lang
-    if source_id:
-        params["source_id"] = source_id
-    if days:
-        params["start"] = (
-            (datetime.now(tz) - timedelta(days=days)).replace(second=0, microsecond=0).isoformat()
-        )
-    # Filter changes reset pagination instead of leaving an empty later page.
-    import hashlib
+    from news import render_news
 
-    page_key = hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()[:16]
-    number = st.number_input("页码", min_value=1, value=1, key="news_page_" + page_key)
-    params["offset"] = (number - 1) * 20
-    data = api("articles", params=params)
-    st.caption(f"共 {data['total']} 条 · 第 {number} 页 / 共 {max(1, (data['total'] + 19) // 20)} 页")
-    if not data["items"]:
-        st.info("当前没有符合条件的文章，请调整筛选或返回第 1 页。")
-
-    @st.dialog("情报详情", width="large")
-    def show_article(identity: str):
-        detail = api("articles/" + identity)
-        st.subheader(detail["title"])
-        st.caption(
-            f"发布 {localtime(detail['published_at'])} · 发现 {localtime(detail['collected_at'])} · {source_names.get(detail['source_id'], '')}"
-        )
-        st.caption("unverified · 本页事实提取尚未经过独立核验")
-        if detail["publication_time_inferred"]:
-            st.warning("来源未提供可靠发布时间，当前使用发现时间。")
-        st.markdown("**来源提供的原始摘要**")
-        st.write(detail["summary"] or "此来源仅提供标题。")
-        st.link_button("阅读原文 ↗", detail["original_url"])
-        completed = [
-            item for item in detail["analyses"] if item["status"] == "completed" and item["analysis_json"]
-        ]
-        latest_ai = next((item for item in completed if item["provider"] == "openai-compatible"), None)
-        latest_rules = next((item for item in completed if item["provider"] == "rules"), None)
-        if latest_ai:
-            result = latest_ai["analysis_json"]
-            st.divider()
-            st.markdown("**AI 中文摘要**")
-            st.write(result.get("summary_zh", ""))
-            st.caption(
-                f"模型：{latest_ai['model']} · 生成 {localtime(latest_ai['created_at'])} · 估算 ¥{latest_ai['estimated_cost']:.4f}"
-            )
-            st.markdown("**事实提取 · 仅基于当前来源**")
-            for fact in result.get("key_facts", []):
-                st.write("• " + fact["text"])
-            st.markdown("**AI 观点 / 潜在影响**")
-            st.write(result.get("impact_analysis", ""))
-            st.write("分析依据：", result.get("reasoning_summary", ""))
-            st.caption("AI 意见不等于已确认事实；AI 自报评分不直接升级告警。")
-        else:
-            st.info("暂无成功的 AI 分析，规则评分和原文仍可阅读。")
-            if config["ai_enabled"] and st.button("分析这篇文章（计入 AI 配额）", key="analyze_" + identity):
-                queued = api("articles/" + identity + "/analyze", "POST")
-                st.success(
-                    "已加入分析队列；稍后刷新查看。" if queued["queued"] else "已有分析结果或正在处理中。"
-                )
-        if latest_rules:
-            with st.expander("规则评分依据"):
-                st.json(latest_rules["analysis_json"].get("score_dimensions", {}))
-        with st.expander("处理与来源证据"):
-            st.write("处理状态：", detail["processing_status"])
-            st.json(
-                {
-                    "article_id": identity,
-                    "original_url": detail["original_url"],
-                    "source_id": detail["source_id"],
-                    "raw_payload": detail["raw_payload"],
-                },
-                expanded=False,
-            )
-
-    for item in data["items"]:
-        with st.container(border=True):
-            st.caption(
-                f"{item['importance_score']} 分 · {source_names.get(item['source_id'], '')} · 发现 {localtime(item['collected_at'])} · {', '.join(industry_names.get(i, i) for i in item['industry_ids'])}"
-            )
-            st.write(item["title"])
-            if item.get("ai_summary_zh"):
-                st.write(item["ai_summary_zh"])
-                st.caption(f"AI 摘要 · {item['ai_model']} · 未独立核验")
-            else:
-                st.write(item["summary"][:450] or "来源仅提供标题，点击阅读原文。")
-                st.caption("来源摘要 · 暂无 AI 分析")
-            if st.button("查看详情与分析", key="detail_" + item["id"]):
-                show_article(item["id"])
+    render_news(api, config, industry_names, tz, localtime)
 
 elif page == "重大事件":
     score = st.slider("最低重要性评分", 0, 100, 60)
@@ -374,27 +252,54 @@ elif page == "数据源管理":
             st.rerun()
 
 elif page == "简报":
-    start = st.date_input("起始日期", datetime.now(tz).date() - timedelta(days=1))
-    end = st.date_input("结束日期（包含当天）", datetime.now(tz).date())
-    if st.button("生成 Markdown 简报"):
-        result = api(
-            "reports",
-            "POST",
-            {
-                "start": datetime.combine(start, datetime.min.time(), tzinfo=tz).isoformat(),
-                "end": datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=tz).isoformat(),
-            },
-        )
-        st.text(result["markdown"])
-        st.download_button("下载简报", result["markdown"], "aih-report.md")
+    st.caption("每日简报自动归档，复用已有分析，不额外调用模型或发送消息。")
+    if st.button("生成昨日日报"):
+        result = api("reports/daily", "POST")
+        st.success("报告已归档，请在下方查看。" if result.get("report_id") else "已加入队列，稍后刷新查看。")
+    archives = api("reports")
+    if archives:
+        titles = {item["id"]: item["title"] for item in archives}
+        chosen = st.selectbox("已归档简报", list(titles), format_func=titles.get)
+        report = api("reports/" + chosen)
+        st.download_button("下载每日简报", report["markdown"], "aih-daily.md", mime="text/markdown")
+        st.markdown(report["markdown"], unsafe_allow_html=False)
+    else:
+        st.info("尚无归档简报。每天按设定时间生成，也可手动生成昨日报告。")
+    with st.expander("自定义时间范围"):
+        start = st.date_input("起始日期", datetime.now(tz).date() - timedelta(days=1))
+        end = st.date_input("结束日期（包含当天）", datetime.now(tz).date())
+        if st.button("生成 Markdown 简报"):
+            result = api(
+                "reports",
+                "POST",
+                {
+                    "start": datetime.combine(start, datetime.min.time(), tzinfo=tz).isoformat(),
+                    "end": datetime.combine(
+                        end + timedelta(days=1), datetime.min.time(), tzinfo=tz
+                    ).isoformat(),
+                },
+            )
+            st.download_button("下载自定义简报", result["markdown"], "aih-report.md")
+            st.markdown(result["markdown"], unsafe_allow_html=False)
 
 elif page == "系统设置":
-    st.json(config)
-    st.info("敏感配置保存在服务器 .env；修改后重启服务。此页面仅展示安全参数，不显示密钥。")
+    a, b = st.columns(2)
+    a.metric("每日 AI 调用上限", config["ai_daily_request_limit"])
+    b.metric("月估算预算", f"¥{config['monthly_ai_budget_cny']:.0f}")
+    st.write("自动备份：", "已启用" if config.get("backup_enabled") else "未启用")
+    st.write("每日报告：", f"每天 {config.get('daily_digest_hour', 8):02d}:00 归档前一天的情报")
+    with st.expander("查看详细配置"):
+        st.json(config)
+    st.info("敏感配置保存在服务器 .env；修改后需重新创建容器。此页面仅展示安全参数，不显示密钥。")
     st.code(
         "AI_ENABLED=true\nAI_API_BASE_URL=https://provider.example/v1\nAI_MODEL=your-model\nAI_API_KEY=在服务器配置"
     )
     for channel in ["telegram", "feishu"]:
+        enabled = next(
+            (value["enabled"] for value in config["channels"] if value["channel"] == channel), False
+        )
+        if not enabled:
+            continue
         if st.button(f"发送 {channel} 测试通知"):
             st.json(api("notifications/test", "POST", params={"channel": channel}))
 

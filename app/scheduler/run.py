@@ -17,6 +17,9 @@ def schedule() -> None:
             select(Source).where(Source.enabled.is_(True), Source.next_poll_at <= now())
         ):
             enqueue(session, "collect", "collect:" + source.id, source_id=source.id)
+        from app.services.maintenance import enqueue_maintenance
+
+        enqueue_maintenance(session)
         session.add(Metric(metric_name="scheduler_heartbeat", metric_value=1))
         session.commit()
 

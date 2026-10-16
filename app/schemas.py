@@ -62,3 +62,9 @@ class ReportRequest(BaseModel):
     start: datetime
     end: datetime
     industry_id: str | None = None
+
+
+class ReadingPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    read: bool | None = None
+    bookmarked: bool | None = None

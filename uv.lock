@@ -42,7 +42,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.7,<3" },
     { name = "pyyaml", specifier = ">=6,<7" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
-    { name = "streamlit", specifier = ">=1.41,<2" },
+    { name = "streamlit", specifier = ">=1.66,<2" },
     { name = "uvicorn", specifier = ">=0.30,<1" },
 ]
 

@@ -27,7 +27,7 @@ from app.models import (
     now,
 )
 from app.notifications.adapters import recipient_key
-from app.schemas import IndustryInput, ReportRequest, SourceInput
+from app.schemas import IndustryInput, ReadingPatch, ReportRequest, SourceInput
 from app.services.pipeline import collector
 from app.services.queue import enqueue
 
@@ -229,8 +229,15 @@ def articles(
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     analysis_status: str = Query("all", pattern="^(all|ai|rules|failed)$"),
+    reading_state: str = Query("all", pattern="^(all|unread|read|saved)$"),
 ):
     query = select(Article)
+    if reading_state == "unread":
+        query = query.where(Article.read_at.is_(None))
+    elif reading_state == "read":
+        query = query.where(Article.read_at.is_not(None))
+    elif reading_state == "saved":
+        query = query.where(Article.bookmarked.is_(True))
     from sqlalchemy import exists
 
     completed_ai = exists(
@@ -341,6 +348,19 @@ def article_detail(identity: str, db: DB):
         )
     ]
     return item
+
+
+@app.patch("/api/v1/articles/{identity}/reading", dependencies=AUTH)
+def update_reading(identity: str, body: ReadingPatch, db: DB):
+    article = required(db, Article, identity)
+    if body.read is None and body.bookmarked is None:
+        raise HTTPException(422, "请提供阅读或收藏状态")
+    if body.read is not None:
+        article.read_at = (article.read_at or now()) if body.read else None
+    if body.bookmarked is not None:
+        article.bookmarked = body.bookmarked
+    db.commit()
+    return {"id": article.id, "read_at": article.read_at, "bookmarked": article.bookmarked}
 
 
 @app.post("/api/v1/articles/{identity}/analyze", dependencies=AUTH)
@@ -505,6 +525,11 @@ def safe_settings():
         "ai_thinking_mode": cfg.ai_thinking_mode,
         "ai_daily_request_limit": cfg.ai_daily_request_limit,
         "ai_timeout": cfg.ai_timeout,
+        "backup_enabled": cfg.backup_enabled,
+        "backup_keep_count": cfg.backup_keep_count,
+        "backup_interval_hours": cfg.backup_interval_hours,
+        "daily_digest_enabled": cfg.daily_digest_enabled,
+        "daily_digest_hour": cfg.daily_digest_hour,
         "monthly_ai_budget_cny": cfg.monthly_ai_budget_cny,
         "critical_alert_threshold": cfg.critical_alert_threshold,
         "important_alert_threshold": cfg.important_alert_threshold,
@@ -531,7 +556,10 @@ def report(body: ReportRequest, db: DB):
         offset=0,
         limit=200,
         analysis_status="all",
+        reading_state="all",
     )
+    from app.services.maintenance import markdown_text, markdown_url
+
     lines = [
         "# AIH 情报简报",
         f"来源发布时间：{body.start.isoformat()} 至 {body.end.isoformat()}",
@@ -541,7 +569,46 @@ def report(body: ReportRequest, db: DB):
     ]
     for item in data["items"]:
         lines += [
-            f"- [{item['title']}]({item['original_url']}) · {item['importance_score']}分 · unverified",
-            f"  {item['summary'][:300]}",
+            f"- [{markdown_text(item['title'])}]({markdown_url(item['original_url'])}) · {item['importance_score']}分 · unverified",
+            f"  {markdown_text((item.get('ai_summary_zh') or item['summary'])[:500])}",
         ]
     return {"markdown": "\n".join(lines), "total": data["total"]}
+
+
+@app.get("/api/v1/reports", dependencies=AUTH)
+def list_reports(db: DB, limit: int = Query(30, ge=1, le=100)):
+    from app.models import Digest
+
+    return [
+        {k: v for k, v in row(item).items() if k != "markdown"}
+        for item in db.scalars(select(Digest).order_by(Digest.period_start.desc()).limit(limit))
+    ]
+
+
+@app.post("/api/v1/reports/daily", dependencies=AUTH)
+def queue_daily_report(db: DB):
+    from zoneinfo import ZoneInfo
+
+    from app.models import Digest
+
+    local = now().astimezone(ZoneInfo(settings().app_timezone))
+    end = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    start = end - timedelta(days=1)
+    existing = db.scalar(select(Digest).where(Digest.period_start == start, Digest.period_end == end))
+    if existing:
+        return {"queued": False, "report_id": existing.id}
+    job = enqueue(
+        db,
+        "daily_digest",
+        "digest:" + start.isoformat(),
+        {"start": start.isoformat(), "end": end.isoformat()},
+    )
+    db.commit()
+    return {"queued": bool(job), "report_id": None}
+
+
+@app.get("/api/v1/reports/{identity}", dependencies=AUTH)
+def get_report(identity: str, db: DB):
+    from app.models import Digest
+
+    return row(required(db, Digest, identity))

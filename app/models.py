@@ -94,6 +94,8 @@ class Article(Base):
     collected_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now, index=True)
     content_hash: Mapped[str] = mapped_column(unique=True)
     raw_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    read_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    bookmarked: Mapped[bool] = mapped_column(default=False, server_default="0", index=True)
     processing_status: Mapped[str] = mapped_column(default="pending")
     industry_ids: Mapped[list] = mapped_column(JSON, default=list)
 
@@ -177,3 +179,15 @@ class Metric(Base):
     metric_value: Mapped[float] = mapped_column()
     labels: Mapped[dict] = mapped_column(JSON, default=dict)
     recorded_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
+
+
+class Digest(Base):
+    __tablename__ = "digests"
+    __table_args__ = (UniqueConstraint("period_start", "period_end"),)
+    id: Mapped[str] = mapped_column(primary_key=True, default=uid)
+    title: Mapped[str] = mapped_column()
+    period_start: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
+    period_end: Mapped[datetime] = mapped_column(UTCDateTime)
+    generated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=now)
+    article_count: Mapped[int] = mapped_column(default=0)
+    markdown: Mapped[str] = mapped_column(Text)

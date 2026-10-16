@@ -2,44 +2,11 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
-import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import select
 from streamlit.testing.v1 import AppTest
 
 from app.core.config import settings
-from app.db import get_session
-from app.main import app
-from app.models import Analysis, Article, Job
-from app.services.pipeline import analyze, collect
-from tests.test_pipeline import mocked_collect
-
-
-@pytest.fixture
-def news_client(db, monkeypatch):
-    mocked_collect(monkeypatch)
-    collect(db, "source")
-    db.commit()
-    for article in db.scalars(select(Article)).all():
-        analyze(db, article.id)
-    article = db.scalar(select(Article).order_by(Article.title))
-    rules = db.scalar(select(Analysis).where(Analysis.article_id == article.id))
-    db.add(
-        Analysis(
-            article_id=article.id,
-            event_id=rules.event_id,
-            provider="openai-compatible",
-            model="fixture",
-            status="completed",
-            analysis_json={"summary_zh": "独特中文摘要", "impact_analysis": "供应链机会"},
-        )
-    )
-    db.commit()
-    app.dependency_overrides[get_session] = lambda: db
-    with TestClient(app) as client:
-        client.headers["X-API-Key"] = "test-admin"
-        yield client
-    app.dependency_overrides.clear()
+from app.models import Job
 
 
 def test_chinese_ai_search_and_filters(news_client):
@@ -89,7 +56,7 @@ def test_news_detail_is_lazy_and_renders_facts(news_client):
         ui.sidebar.radio[0].set_value("实时新闻").run()
         assert not ui.exception
         assert not any(path.startswith("/api/v1/articles/") for path in calls)
-        details = [button for button in ui.button if button.label == "查看详情与分析"]
+        details = [button for button in ui.button if button.label == "开始阅读"]
         assert len(details) == 2
         details[0].click().run()
         assert not ui.exception

@@ -29,6 +29,15 @@ def dispatch(session, job: Job) -> None:
         collect(session, job.source_id)
     elif job.job_type == "analyze":
         analyze(session, job.payload["article_id"])
+    elif job.job_type == "backup":
+        from app.services.maintenance import backup_database
+
+        backup_database(session)
+    elif job.job_type == "daily_digest":
+        from app.processing.normalizer import timestamp
+        from app.services.maintenance import generate_daily_digest
+
+        generate_daily_digest(session, timestamp(job.payload["start"]), timestamp(job.payload["end"]))
     elif job.job_type in {"notify", "notify_batch"}:
         if job.job_type == "notify":
             note = session.get(Notification, job.payload["notification_id"])

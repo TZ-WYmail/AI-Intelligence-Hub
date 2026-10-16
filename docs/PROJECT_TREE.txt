@@ -21,6 +21,7 @@ app/processing/normalizer.py
 app/processing/scorer.py
 app/scheduler/run.py
 app/schemas.py
+app/services/maintenance.py
 app/services/pipeline.py
 app/services/queue.py
 app/workers/run.py
@@ -30,6 +31,7 @@ config/industries.yaml
 config/rules.yaml
 config/sources.yaml
 dashboard/Home.py
+dashboard/news.py
 docs/ACCEPTANCE.md
 docs/LIMITATIONS.md
 docs/OPERATIONS.md
@@ -37,13 +39,16 @@ docs/PROJECT_TREE.txt
 docs/SOURCE_POLICY.md
 docs/SRS_TRACEABILITY.md
 docs/STAGE2.md
+docs/STAGE3.md
 docs/benchmark.json
 docs/docker-validation.json
 docs/source-discovery.jsonl
 docs/source-validation.json
 docs/stage2-validation.json
+docs/stage3-validation.json
 migrations/env.py
 migrations/versions/0001_initial.py
+migrations/versions/0002_reading_digests.py
 pyproject.toml
 scripts/backup.py
 scripts/benchmark.py
@@ -61,6 +66,8 @@ tests/test_migrations_backup.py
 tests/test_news_reading.py
 tests/test_pipeline.py
 tests/test_processing.py
+tests/test_reader_workspace.py
+tests/test_reading_maintenance.py
 tests/test_reliability.py
 uv.lock
 data/.gitkeep

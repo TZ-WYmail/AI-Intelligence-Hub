@@ -13,7 +13,7 @@ def test_real_migration_roundtrip_and_backup(tmp_path):
         subprocess.run([sys.executable, *arguments], env=environment, check=True, capture_output=True)
     with sqlite3.connect(database) as db:
         assert db.execute("select count(*) from industries").fetchone()[0] == 8
-        assert db.execute("select version_num from alembic_version").fetchone()[0] == "0001"
+        assert db.execute("select version_num from alembic_version").fetchone()[0] == "0002"
         assert db.execute("pragma integrity_check").fetchone()[0] == "ok"
     backup = tmp_path / "backup.db"
     subprocess.run(

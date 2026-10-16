@@ -1,0 +1,37 @@
+{
+  "reading_state_survived_restart": true,
+  "saved_filter_verified": true,
+  "original_reading_state_restored": true,
+  "archived_report": {
+    "id": "1cb18004-b849-4166-8889-d4af4a67ebb0",
+    "title": "每日情报 · 2026-10-16",
+    "period_start": "2026-10-15T16:00:00+00:00",
+    "period_end": "2026-10-16T16:00:00+00:00",
+    "generated_at": "2026-10-16T16:46:11.068892+00:00",
+    "article_count": 927
+  },
+  "automatic_backup_integrity": "ok",
+  "backup_file_permissions": "0600",
+  "snapshot": {
+    "articles_24h": 1176,
+    "events_24h": 1176,
+    "critical_24h": 0,
+    "active_sources": 20,
+    "collection_success_rate": 0.9201277955271565,
+    "last_collection": "2026-10-16T16:40:20.169027+00:00",
+    "backlog": 0,
+    "ai_calls": 1,
+    "ai_input_tokens": 749,
+    "ai_output_tokens": 401,
+    "ai_estimated_cost_cny": 0.01952,
+    "scheduler_last_seen": "2026-10-16T16:51:04.008350+00:00",
+    "worker_last_seen": "2026-10-16T16:50:44.242518+00:00",
+    "timezone": "Asia/Shanghai",
+    "ai_enabled": true
+  },
+  "notifications_enabled": false,
+  "additional_report_model_calls": 0,
+  "tests_passed": 41,
+  "browser_reader_verified": true,
+  "reader_scroll_top_verified": true
+}
