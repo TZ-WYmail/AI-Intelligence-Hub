@@ -9,10 +9,17 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.security import RemoteError
 from app.db import Session
-from app.models import Job, Metric, Notification, Source, now
+from app.models import Job, Metric, Source, now
 from app.notifications.adapters import WebhookNotifier, recipient_key
 from app.services.pipeline import analyze, collect
-from app.services.queue import claim, recover
+from app.services.queue import (
+    InvalidJobPayload,
+    claim,
+    notifications_for_job,
+    payload_error,
+    recover,
+    sync_notification_state,
+)
 
 logger = logging.getLogger("worker")
 
@@ -25,6 +32,9 @@ def quiet() -> bool:
 
 
 def dispatch(session, job: Job) -> None:
+    error = payload_error(job)
+    if error:
+        raise InvalidJobPayload(error)
     if job.job_type == "collect":
         collect(session, job.source_id)
     elif job.job_type == "analyze":
@@ -39,22 +49,7 @@ def dispatch(session, job: Job) -> None:
 
         generate_daily_digest(session, timestamp(job.payload["start"]), timestamp(job.payload["end"]))
     elif job.job_type in {"notify", "notify_batch"}:
-        if job.job_type == "notify":
-            note = session.get(Notification, job.payload["notification_id"])
-            notes = [note] if note and note.status != "sent" else []
-        else:
-            from app.processing.normalizer import timestamp
-
-            notes = list(
-                session.scalars(
-                    select(Notification).where(
-                        Notification.channel == job.payload["channel"],
-                        Notification.notification_type == "P1",
-                        Notification.status.in_(["pending", "retry_wait"]),
-                        Notification.created_at <= timestamp(job.payload["cutoff"]),
-                    )
-                )
-            )
+        notes = notifications_for_job(session, job)
         if not notes:
             return
         if any(note.recipient != recipient_key(note.channel, settings()) for note in notes):
@@ -118,40 +113,34 @@ def tick() -> bool:
         except Exception as exc:
             session.rollback()
             job = session.get(Job, job.id)
-            code = exc.code if isinstance(exc, RemoteError) else type(exc).__name__
+            code = exc.code if isinstance(exc, (RemoteError, InvalidJobPayload)) else type(exc).__name__
             if isinstance(exc, RemoteError) and exc.code == "QUIET_HOURS":
                 # Intentional scheduling deferral must not exhaust failure retries.
                 job.attempt_count = max(0, job.attempt_count - 1)
             delay = min(3600, 30 * 2**job.attempt_count)
             if isinstance(exc, RemoteError):
                 delay = max(delay, exc.retry_after)
-            job.status = "retry_wait" if job.attempt_count < settings().job_max_attempts else "failed"
+            if isinstance(exc, InvalidJobPayload):
+                # Bad parameters are terminal and must not consume the remaining retries.
+                job.status = "failed"
+            else:
+                job.status = "retry_wait" if job.attempt_count < settings().job_max_attempts else "failed"
             job.last_error = code
             job.scheduled_at = now() + timedelta(seconds=delay)
             if job.status == "failed":
                 job.dedup_key = None
                 job.finished_at = now()
-            if job.job_type == "collect":
+            if job.job_type == "collect" and job.source_id:
+                # A corrupt/removed source must not raise while recording the failure.
                 source = session.get(Source, job.source_id)
-                source.error_count += 1
-                source.checked_count += 1
-                source.last_checked_at = now()
-                source.last_error, source.status = code, "backoff"
-                source.next_poll_at = job.scheduled_at
-            if job.job_type == "notify":
-                note = session.get(Notification, job.payload["notification_id"])
-                note.status, note.last_error = job.status, code
-            if job.job_type == "notify_batch":
-                for note in session.scalars(
-                    select(Notification).where(
-                        Notification.channel == job.payload["channel"],
-                        Notification.notification_type == "P1",
-                        Notification.status != "sent",
-                    )
-                ):
-                    note.last_error = code
-                    if job.status == "failed":
-                        note.status = "failed"
+                if source:
+                    source.error_count += 1
+                    source.checked_count += 1
+                    source.last_checked_at = now()
+                    source.last_error, source.status = code, "backoff"
+                    source.next_poll_at = job.scheduled_at
+            if job.job_type == "notify" or job.job_type == "notify_batch":
+                sync_notification_state(session, job, job.status, code)
             session.commit()
             logger.warning("job=%s type=%s error=%s", job.id, job.job_type, code)
         return True
