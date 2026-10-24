@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -13,10 +14,14 @@ from sqlalchemy.orm import sessionmaker
 from app.collectors.base import Collection
 from app.core.config import settings
 from app.db import make_engine
-from app.models import Article, Base, Industry, Job, Metric, Notification, Source, now
+from app.models import Article, Base, Event, Industry, Job, Metric, Notification, Source, now
 from app.services import pipeline
 from app.services.queue import enqueue
 from app.workers import run as worker
+
+SOURCE_COUNT = 100
+ARTICLES_PER_SOURCE = 30
+EXPECTED_ARTICLES = SOURCE_COUNT * ARTICLES_PER_SOURCE
 
 
 def percentile(values):
@@ -40,7 +45,7 @@ def main():
         factory = sessionmaker(engine, expire_on_commit=False)
         with factory() as db:
             db.add(Industry(id="ai", name="AI", slug="ai", keywords=["AI"]))
-            for index in range(100):
+            for index in range(SOURCE_COUNT):
                 source = Source(
                     id=f"src-{index}",
                     name=f"Synthetic {index}",
@@ -70,7 +75,7 @@ def main():
                             publication_time_inferred=False,
                             raw_payload={"synthetic": True},
                         )
-                        for i in range(30)
+                        for i in range(ARTICLES_PER_SOURCE)
                     ]
                 )
 
@@ -97,10 +102,16 @@ def main():
             )
             report = {
                 "generated_at": now().isoformat(),
-                "source_count": 100,
+                "source_count": SOURCE_COUNT,
                 "articles": db.scalar(select(func.count()).select_from(Article)),
+                "events": db.scalar(select(func.count()).select_from(Event)),
                 "notifications_sent": db.scalar(
                     select(func.count()).select_from(Notification).where(Notification.status == "sent")
+                ),
+                "unfinished_jobs": db.scalar(
+                    select(func.count())
+                    .select_from(Job)
+                    .where(Job.status.in_(["pending", "retry_wait", "running"]))
                 ),
                 "failed_jobs": db.scalar(select(func.count()).select_from(Job).where(Job.status == "failed")),
                 "elapsed_seconds": round(elapsed, 3),
@@ -110,6 +121,25 @@ def main():
                 "limitations": "Single worker; mock RSS and immediate mock notifications; no real network or AI latency. Not a production SLA.",
             }
             print(json.dumps(report, ensure_ascii=False, indent=2))
+            # Every fixture article has a distinct source URL and indexed title, so
+            # the fixture defines EXPECTED_ARTICLES independent events. A lower
+            # event/notification count means false merging or dropped work, not a
+            # throughput trade-off. Fail loudly and never publish a partial report.
+            expected = {
+                "articles": EXPECTED_ARTICLES,
+                "events": EXPECTED_ARTICLES,
+                "notifications_sent": EXPECTED_ARTICLES,
+                "unfinished_jobs": 0,
+                "failed_jobs": 0,
+            }
+            failures = [
+                f"{key}={report[key]} (expected {value})"
+                for key, value in expected.items()
+                if report[key] != value
+            ]
+            if failures:
+                print("benchmark verification failed: " + "; ".join(failures), file=sys.stderr)
+                raise SystemExit(1)
             Path("docs/benchmark.json").write_text(json.dumps(report, ensure_ascii=False, indent=2))
         engine.dispose()
 
