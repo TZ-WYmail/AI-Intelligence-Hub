@@ -43,6 +43,7 @@ dashboard/news.py
 dashboard/visuals.py
 data/.gitkeep
 docs/ACCEPTANCE.md
+docs/EVENT_LINKING_REVIEW.md
 docs/LIMITATIONS.md
 docs/OPERATIONS.md
 docs/PROJECT_TREE.txt
@@ -51,6 +52,9 @@ docs/SRS_TRACEABILITY.md
 docs/STAGE2.md
 docs/STAGE3.md
 docs/STAGE4.md
+docs/V1_ACCEPTANCE.md
+docs/V1_ITERATIONS.md
+docs/V1_ROADMAP.md
 docs/VISUAL_DASHBOARD.md
 docs/benchmark.json
 docs/docker-validation.json
@@ -77,6 +81,7 @@ tests/test_adapters_security.py
 tests/test_api.py
 tests/test_dashboard.py
 tests/test_event_linking.py
+tests/test_job_recovery.py
 tests/test_migrations_backup.py
 tests/test_news_reading.py
 tests/test_pipeline.py

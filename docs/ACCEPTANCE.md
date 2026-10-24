@@ -2,6 +2,8 @@
 
 日期：2026-10-16（Asia/Shanghai）。宿主 Ubuntu 26.04.1，Python 3.12.14，Git 2.53.0，Docker 29.1.3，Compose 2.40.3。Ubuntu 24.04 尚未单独测试。
 
+> **历史记录。** 本文件是 2026-10-16 的首版验收证据，保留原文以记录当时状态；其中“26 项测试”“尚未接通真实 AI”“本地 DeepSeek 未用于委派”等说法已被后续阶段更新。当前交付验收见 [V1 交付验收报告](V1_ACCEPTANCE.md)（2026-10-24），限制与后续工作以 [LIMITATIONS.md](LIMITATIONS.md) 为准。
+
 ## 已执行且通过
 
 - 26 项 pytest 测试，耗时约 2.2 秒（实际耗时随运行波动）。包含 RSS/Atom 字段解析、损坏输入、缺时间、中英文、HTML 清理、时间/URL/内容哈希、关键词边界/排除、评分、配置/Schema 校验。
@@ -32,7 +34,7 @@ uv run ruff format --check .
 
 GDELT：协议适配和 fixture 测试通过，但真实请求失败（首次 RemoteError，随后复核触发 TOTAL_TIMEOUT）；保留禁用。NVIDIA Blog：ConnectTimeout，禁用。未为 Anthropic、FDA、中国政府网等虚构 RSS。
 
-本地 DeepSeek：主页 HTTP 401，尝试的 `/v1/models` HTTP 404；未取得可用模型 API/登录，不用于委派或作为可用 AI 服务声明。
+本地 DeepSeek：主页 HTTP 401，尝试的 `/v1/models` HTTP 404；未取得可用模型 API/登录，不用于委派或作为可用 AI 服务声明。（历史结论：后续已由 DeepSeek Harness 会话进行真实委派，见 [V1_ACCEPTANCE.md](V1_ACCEPTANCE.md)。）
 
 ## 合成负载
 

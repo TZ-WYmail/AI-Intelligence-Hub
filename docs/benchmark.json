@@ -1,12 +1,14 @@
 {
-  "generated_at": "2026-10-16T08:58:21.376194+00:00",
+  "generated_at": "2026-10-24T14:59:24.202393+00:00",
   "source_count": 100,
   "articles": 3000,
+  "events": 3000,
   "notifications_sent": 3000,
+  "unfinished_jobs": 0,
   "failed_jobs": 0,
-  "elapsed_seconds": 18.009,
-  "processing_p95_seconds": 0.1495,
-  "mock_notification_p95_seconds": 0.0023,
+  "elapsed_seconds": 46.682,
+  "processing_p95_seconds": 0.4642,
+  "mock_notification_p95_seconds": 0.0027,
   "external_calls": false,
   "limitations": "Single worker; mock RSS and immediate mock notifications; no real network or AI latency. Not a production SLA."
 }

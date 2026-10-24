@@ -20,6 +20,12 @@
 
 第二阶段已接通 DeepSeek 官方 API，支持非思考模式；新闻列表支持 AI 中文摘要、摘要/影响搜索和按需详情。新增历史文章单篇分析队列入口。通知依用户要求保持关闭。当前真实 AI 的初始配额为每日20次、月估算20元，历史整库不会自动重跑。详见 [第二阶段交付记录](docs/STAGE2.md)。此前首版验收记录保留历史日期，其“尚未接通真实AI”状态已由本阶段更新。
 
+## V1 交付与任务恢复（2026-10-24）
+
+V1 三段（失败任务恢复、事件关联准确性、部署交付证据）已完成并通过自动化验收：全套 110 项测试、Ruff 检查、合成基准、Compose 配置检查与镜像构建均通过。完整证据、复现命令和未覆盖项见 [V1 交付验收报告](docs/V1_ACCEPTANCE.md)。
+
+“运行日志”页现在可以恢复失败任务：把“状态筛选”切到“失败”，勾选要重试的任务，点击“重试所选失败任务”。可重试的是**采集、分析、日报归档、备份**四类；**通知与通知汇总任务禁止手动重试**。重试会把原失败任务重新入队为 `pending` 并返回结果（同一任务行、同一 ID，不新建任务，保留审计记录），**不代表已经执行**——当前 Worker 未运行，需启动 Worker 后才会实际执行。重复点击或已有同类活动任务会去重，不会重复入队；原尝试次数与最近错误会保留，便于判断修复是否生效。批量选择时逐条提交，并分别汇总“已入队 / 已去重 / 失败（含任务 ID 与原因）”。API 入口为 `POST /api/v1/jobs/{id}/retry`。
+
 ## 快速开始
 
 需要 Python 3.12 和 uv；Docker 模式不要求宿主安装 Python。所有命令在仓库根目录执行。
@@ -38,7 +44,7 @@ uv run python -m scripts.local status
 uv run python -m scripts.local down
 ```
 
-此次开发已完成正式 Docker 部署，当前四服务由 Docker 管理；原本地开发进程已停止。正式数据在 `aih_aih-data` 卷，本地 `data/aih.db` 与迁移备份保留。
+此前已完成正式 Docker 部署，四服务由 Docker 管理；当前交付验收期间服务保持停止，原数据卷与 `.env` 保留。正式数据在 `aih_aih-data` 卷，本地 `data/aih.db` 与迁移备份保留。
 
 此次开发环境已生成本地 `.env`（0600 权限）和随机管理员密钥；请直接查看该文件，不要覆盖它。打开 http://127.0.0.1:8501，在侧栏输入 `ADMIN_API_KEY`。窄窗口点击左上角展开侧栏。API 文档：http://127.0.0.1:8000/docs；公开探针：`/api/v1/health/live`、`/api/v1/health/ready`。业务接口统一要求 `X-API-Key` 请求头。密钥为空时拒绝访问全部业务数据。OpenAPI 文档只公开接口结构，不公开数据/密钥。
 
@@ -103,7 +109,7 @@ AI_OUTPUT_CNY_PER_MILLION=30
 
 价格必须按实际供应商设置，不代表任何供应商当前报价。兼容 `/chat/completions`、JSON response format；需要支持该协议的模型。预算在调用前预留保守费用；失败请求亦保留预留费用，防止失败重试失控。实际有 Token 用量时按配置单价计费；没有 usage 时保留预留值。按 UTC 日/月统计。额度不足自动使用规则结果。首次规则分析先提交，AI 失败使用同一事件重试，不阻塞采集。
 
-AI 分析将新闻文本包装为不可信 JSON 输入；模型无命令执行工具，结果通过 Pydantic 校验。无依据的 confirmed 会强制回到 unverified，事实只允许引用当前文章。AI 推测独立显示；**MVP 告警采用可解释规则评分，AI 自报高分不能单独升级告警**。未启用 AI 时不会调用模型。端口 3080 上的本地 DeepSeek 网页返回 401，`/v1/models` 返回 404；没有推断/复用其登录凭据，未将其当作可用模型 API。
+AI 分析将新闻文本包装为不可信 JSON 输入；模型无命令执行工具，结果通过 Pydantic 校验。无依据的 confirmed 会强制回到 unverified，事实只允许引用当前文章。AI 推测独立显示；**MVP 告警采用可解释规则评分，AI 自报高分不能单独升级告警**。未启用 AI 时不会调用模型。不要把第三方网页的登录凭据当作模型 API；兼容接口需单独配置，本项目未复用任何网页登录凭据。
 
 ### Telegram / 飞书
 
@@ -158,4 +164,4 @@ uv run python -m scripts.backup /secure/location/aih-backup.db
 
 备份使用 SQLite backup API，包含 WAL 已提交内容，拒绝覆盖现有备份。恢复前停止全部服务，将备份复制到数据文件路径，确认属主/权限并移除旧数据库同名 `-wal`、`-shm` 临时文件后启动；先另行保留完整旧数据库及其伴随文件。Docker 备份示例：`docker compose exec worker python -m scripts.backup data/backup.db`，再使用 `docker compose cp worker:/srv/aih/data/backup.db ./backup.db` 导出。恢复可将备份复制回已停止的卷挂载位置；先备份原卷。
 
-更多资料：[验收与实测](docs/ACCEPTANCE.md)、[已知限制与下一阶段](docs/LIMITATIONS.md)、[故障排查](docs/OPERATIONS.md)、[真实来源验证](docs/source-validation.json)、[合成压测](docs/benchmark.json)。
+更多资料：[V1 交付验收报告](docs/V1_ACCEPTANCE.md)（2026-10-24，最新）、[首版验收记录](docs/ACCEPTANCE.md)（历史）、[已知限制与下一阶段](docs/LIMITATIONS.md)、[故障排查](docs/OPERATIONS.md)、[真实来源验证](docs/source-validation.json)、[合成压测](docs/benchmark.json)。
