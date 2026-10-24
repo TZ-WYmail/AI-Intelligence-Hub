@@ -47,6 +47,7 @@ docs/EVENT_LINKING_REVIEW.md
 docs/LIMITATIONS.md
 docs/OPERATIONS.md
 docs/PROJECT_TREE.txt
+docs/SOAK.md
 docs/SOURCE_POLICY.md
 docs/SOURCE_RECHECK.md
 docs/SRS_TRACEABILITY.md
@@ -77,6 +78,7 @@ scripts/discover_sources.py
 scripts/health.py
 scripts/local.py
 scripts/recheck_sources.py
+scripts/soak.py
 scripts/verify_sources.py
 tests/__init__.py
 tests/conftest.py
@@ -93,5 +95,6 @@ tests/test_reader_workspace.py
 tests/test_reading_maintenance.py
 tests/test_recheck_sources.py
 tests/test_reliability.py
+tests/test_soak.py
 tests/test_visual_reports.py
 uv.lock
