@@ -48,6 +48,7 @@ docs/LIMITATIONS.md
 docs/OPERATIONS.md
 docs/PROJECT_TREE.txt
 docs/SOURCE_POLICY.md
+docs/SOURCE_RECHECK.md
 docs/SRS_TRACEABILITY.md
 docs/STAGE2.md
 docs/STAGE3.md
@@ -59,6 +60,7 @@ docs/VISUAL_DASHBOARD.md
 docs/benchmark.json
 docs/docker-validation.json
 docs/source-discovery.jsonl
+docs/source-recheck-2026-10-24.json
 docs/source-validation.json
 docs/stage2-validation.json
 docs/stage3-validation.json
@@ -74,6 +76,7 @@ scripts/bootstrap.py
 scripts/discover_sources.py
 scripts/health.py
 scripts/local.py
+scripts/recheck_sources.py
 scripts/verify_sources.py
 tests/__init__.py
 tests/conftest.py
@@ -88,6 +91,7 @@ tests/test_pipeline.py
 tests/test_processing.py
 tests/test_reader_workspace.py
 tests/test_reading_maintenance.py
+tests/test_recheck_sources.py
 tests/test_reliability.py
 tests/test_visual_reports.py
 uv.lock

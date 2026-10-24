@@ -123,4 +123,5 @@ docker compose config --quiet
 - [V1 迭代与问题修复记录](V1_ITERATIONS.md)
 - [事件关联修复记录](EVENT_LINKING_REVIEW.md)
 - [初代产品分段验收目标](V1_ROADMAP.md)
+- [第四段来源受控复核（2026-10-24）](SOURCE_RECHECK.md)
 - [SRS 实现对照](SRS_TRACEABILITY.md)
