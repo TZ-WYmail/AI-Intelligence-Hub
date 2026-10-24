@@ -31,7 +31,17 @@ if not key:
     st.stop()
 
 
-def api(path: str, method: str = "GET", body=None, params=None):
+class ApiError(RuntimeError):
+    """User-facing API failure a caller can report without stopping the whole page."""
+
+
+def api(path: str, method: str = "GET", body=None, params=None, *, soft: bool = False):
+    def fail(message: str) -> None:
+        if soft:
+            raise ApiError(message)
+        st.error(message)
+        st.stop()
+
     try:
         response = httpx.request(
             method,
@@ -42,14 +52,27 @@ def api(path: str, method: str = "GET", body=None, params=None):
             timeout=90,
             trust_env=False,
         )
-        if response.status_code >= 400:
-            st.error(f"请求失败 ({response.status_code})：{response.json().get('detail', '')}")
-            st.stop()
-        return response.json()
     except httpx.HTTPError:
-        st.error("无法连接 API 服务，请检查服务状态。")
-        st.stop()
+        fail("无法连接 API 服务，请检查服务状态。")
+    try:
+        data = response.json()
+    except ValueError:
+        # Gateways/502-503 pages are often HTML; never render or relay them.
+        fail(f"API 服务暂不可用（HTTP {response.status_code}），请稍后重试。")
+    if response.status_code >= 400:
+        detail = data.get("detail") if isinstance(data, dict) else None
+        if response.status_code >= 500 or not isinstance(detail, str) or not detail:
+            fail(f"请求失败（HTTP {response.status_code}），请稍后重试。")
+        else:
+            fail(f"请求失败（HTTP {response.status_code}）：{detail[:200]}")
+    return data
 
+
+# Render the page heading before the first API call so a gateway error leaves a
+# readable page instead of a blank screen.
+show_heading = not (page == "实时新闻" and st.session_state.get("_reader"))
+if show_heading:
+    st.title(page)
 
 config = api("settings")
 tz = ZoneInfo(config["timezone"])
@@ -61,8 +84,7 @@ def localtime(value):
     return datetime.fromisoformat(value).astimezone(tz).strftime("%m-%d %H:%M")
 
 
-if not (page == "实时新闻" and st.session_state.get("_reader")):
-    st.title(page)
+if show_heading:
     st.caption(f"多行业实时监控 / {datetime.now(tz).strftime('%Y年%m月%d日')} / {config['timezone']}")
     if st.button("刷新数据", type="secondary"):
         st.rerun()
@@ -322,8 +344,84 @@ elif page == "系统设置":
             st.json(api("notifications/test", "POST", params={"channel": channel}))
 
 elif page == "运行日志":
+    job_status_labels = {
+        "all": "全部",
+        "failed": "失败",
+        "running": "运行中",
+        "pending": "等待中",
+        "retry_wait": "等待重试",
+        "completed": "已完成",
+    }
+    job_type_labels = {
+        "collect": "采集",
+        "analyze": "分析",
+        "daily_digest": "日报归档",
+        "backup": "备份",
+        "notify": "通知",
+        "notify_batch": "通知汇总",
+    }
+    retryable_types = {"collect", "analyze", "daily_digest", "backup"}
+
     st.subheader("持久化任务状态")
-    st.dataframe(api("jobs", params={"limit": 100}), use_container_width=True)
+    status = st.selectbox("状态筛选", list(job_status_labels), format_func=job_status_labels.get)
+    jobs = api("jobs", params={"limit": 100, "status": status})
+    st.dataframe(
+        [
+            {
+                "任务类别": job_type_labels.get(job["job_type"], job["job_type"]),
+                "状态": job_status_labels.get(job["status"], job["status"]),
+                "尝试次数": job["attempt_count"],
+                "计划时间": localtime(job["scheduled_at"]),
+                "最近错误": job["last_error"] or "—",
+                "任务 ID": job["id"],
+            }
+            for job in jobs
+        ],
+        use_container_width=True,
+    )
+    with st.expander("原始任务详情"):
+        st.dataframe(jobs, use_container_width=True)
+
+    retryable = [job for job in jobs if job["status"] == "failed" and job["job_type"] in retryable_types]
+    if retryable:
+        # Options are the real job IDs (unique); the label only formats them for
+        # people. Truncated IDs are never used as dict keys, which would drop
+        # jobs that share an 8-character prefix.
+        labels = {
+            job["id"]: (
+                f"{job_type_labels.get(job['job_type'], job['job_type'])}"
+                f" · {job['id']} · {job['last_error'] or '失败'}"
+            )
+            for job in retryable
+        }
+        chosen = st.multiselect("选择要重试的失败任务", list(labels), format_func=labels.get)
+        if st.button("重试所选失败任务"):
+            if not chosen:
+                st.warning("请先选择失败任务。")
+            else:
+                queued = deduplicated = 0
+                failures = []
+                for job_id in chosen:
+                    # soft=True keeps one rejected task from stopping the loop and
+                    # hiding results already queued earlier in this batch.
+                    try:
+                        result = api("jobs/" + job_id + "/retry", "POST", soft=True)
+                    except ApiError as exc:
+                        failures.append(f"{job_id}：{exc}")
+                        continue
+                    if result.get("queued"):
+                        queued += 1
+                    else:
+                        deduplicated += 1
+                if queued:
+                    st.success(f"已入队 {queued} 个重试任务。这里只创建任务，需 Worker 运行后才会执行。")
+                if deduplicated:
+                    st.info(f"{deduplicated} 个任务已在队列或已有同类活动任务，未重复入队。")
+                if failures:
+                    st.error("以下任务未能重试：" + "；".join(failures))
+    else:
+        st.caption("当前筛选下没有可手动重试的失败任务。通知类任务不支持手动重试。")
+
     st.subheader("通知投递")
     st.dataframe(api("notifications"), use_container_width=True)
     st.subheader("运行指标")

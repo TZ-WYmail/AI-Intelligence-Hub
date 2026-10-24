@@ -32,6 +32,21 @@ def isolate_real_credentials(monkeypatch):
     settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def isolate_api_rate_limiter():
+    """Reset the process-global per-client request window between tests.
+
+    The limiter lives in ``app.main`` and keys on the TestClient host, so a full
+    suite would otherwise exhaust the 240 requests/minute budget and make later
+    Streamlit/app tests observe spurious HTTP 429 errors.
+    """
+    from app.main import _requests
+
+    _requests.clear()
+    yield
+    _requests.clear()
+
+
 @pytest.fixture
 def db(tmp_path, monkeypatch):
     monkeypatch.setenv("ADMIN_API_KEY", "test-admin")

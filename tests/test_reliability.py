@@ -316,6 +316,40 @@ def test_corrupt_lease_payload_isolated_and_failed(db, monkeypatch):
     assert db.get(Notification, note.id).status == "pending"
 
 
+@pytest.mark.parametrize(
+    ("channel", "error"),
+    [
+        (["telegram"], "INVALID_CHANNEL"),
+        ({"name": "telegram"}, "INVALID_CHANNEL"),
+        ([], "MISSING_CHANNEL"),
+    ],
+)
+def test_unhashable_batch_channel_fails_alone_without_blocking_tick(db, monkeypatch, channel, error):
+    corrupt = Job(
+        job_type="notify_batch",
+        dedup_key="batch:bad-channel",
+        payload={"channel": channel, "cutoff": now().isoformat()},
+        status="running",
+        attempt_count=settings().job_max_attempts,
+        started_at=now() - timedelta(seconds=settings().job_lease_seconds + 1),
+    )
+    healthy = Job(job_type="collect", source_id="source", payload={}, status="pending")
+    db.add_all([corrupt, healthy])
+    db.commit()
+    factory = sessionmaker(db.bind, expire_on_commit=False)
+    monkeypatch.setattr(worker, "Session", factory)
+    ran = []
+    monkeypatch.setattr(worker, "dispatch", lambda session, job: ran.append(job.job_type))
+
+    # An unhashable JSON channel must fail only this job; a membership test that
+    # raises TypeError here would abort recover and stop every later job in the tick.
+    assert worker.tick()
+    db.expire_all()
+    assert ran == ["collect"]
+    assert corrupt.status == "failed" and corrupt.last_error == error
+    assert corrupt.finished_at is not None and corrupt.dedup_key is None
+
+
 def test_missing_notify_payload_is_failed_not_silently_completed(db, monkeypatch):
     job = Job(job_type="notify", dedup_key="notify:broken", payload={}, status="pending")
     db.add(job)

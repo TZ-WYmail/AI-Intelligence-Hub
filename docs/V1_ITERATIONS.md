@@ -50,3 +50,66 @@
 - 第三方无幂等键，外部已接收但状态未落盘时仍可能重复发送；Lease 恢复不改变该边界。
 - 多 Worker 的租约与预算语义仍不支持；SQLite 单 Worker 部署假设保持不变。
 - 通知状态 `retry_wait` 现在也会用于批量通知，界面按原始值展示，后续可补状态中文映射。
+
+# 任务恢复 API 与运行日志体验（2026-10-24）
+
+本轮接续网络中断遗留的未提交改动，完成失败任务重试 API 与「运行日志」页验收。硬约束：只用临时 SQLite 与 mock，不启动 API/Worker/Scheduler/看板/Compose，不读取或输出 `.env`/凭据，不调用真实模型或通知，不改真实数据库配置，不安装升级软件，不 commit/push；`docs/benchmark.json` 与 `app/processing/event_matcher.py` 未改动。
+
+## 失败 1：运行日志重试选择使用截断 ID 作为键
+
+- **现象**：`test_run_logs_filter_and_retry_actions` 断言完整 `failed-collect` 出现在选项里，UI 只显示 `id[:8]`。
+- **根因**：`choices` 以 `f"{类别} · {id[:8]} · {错误}"` 为字典键。8 位前缀相同的两个任务会互相覆盖，其中一条从可重试列表中静默消失；测试则把截断标签当成唯一标识。
+- **修复**：`dashboard/Home.py` 改为 `multiselect` 选项值就是真实任务 ID，`format_func` 只用完整 ID 生成展示标签。选择与提交都基于真实 ID，不再用截断字符串做键。
+- **回归**：测试按真实 ID `set_value(["failed-collect", "failed-disabled-source"])`，断言 `multiselect.value` 为真实 ID，并确认重试后 `failed-collect` 变为 `pending`。
+
+## 失败 2：网关非 JSON 错误断言了“无标题”
+
+- **现象**：`test_dashboard_non_json_gateway_error_stops_safely` 断言 `not ui.title`。
+- **根因**：(1) 测试把“页面空白”当成安全，而标题本身不泄露上游内容；(2) 页面在第一次 API 调用之后才渲染标题，网关 503 时标题也不会出现。
+- **修复**：`Home.py` 在首个 API 调用（`settings`）之前渲染页面标题；非 JSON/5xx 仍只显示固定的安全提示并 `st.stop()`。
+- **回归**：断言标题 `概览` 仍存在、错误文案精确为 `API 服务暂不可用（HTTP 503），请稍后重试。`、不含 `secret`，且错误后不再渲染业务数据（`metric`/`dataframe`/`subheader` 为空）。
+
+## 失败 3：简报 UI 用例受进程级限流污染
+
+- **现象**：`test_report_ui_pages_preserve_custom_results_and_reset_sizes` 单独运行通过、全套偶发失败；本次复现为「Entry 00」或「Custom 11」缺失。
+- **根因**：`app/main.py` 的 `_requests` 是进程级、按客户端 host 计数的 240 次/分钟限流窗口。全套测试在数秒内共享同一 `testclient` host，累计请求超限后 API 返回 429「请求过于频繁」，简报页 `api()` 收到 4xx 后 `st.stop()`，后续 markdown 与分页控件全部不渲染。不是日期或 Streamlit 状态问题。
+- **修复**：`tests/conftest.py` 新增 autouse fixture，每个测试前后清空该限流窗口，使测试互不影响；未放宽任何业务断言，也未修改生产限流逻辑。
+- **回归**：全套连续多次运行稳定通过；失败前已用 `ui.session_state.to_dict()` 确认 `_custom_brief` 存在且页码为 3，页面上唯一的错误是 429。
+
+## 审查修正 1：畸形 payload 与倒置日报窗口
+
+- **问题**：`payload_error` 只校验 truthy。`article_id` 为 list/dict/int 时可通过校验，随后进入查询并返回 409（或潜在 500）；`daily_digest` 的 `end <= start` 也能重试成功。
+- **修复**：新增 `identifier_error`、`timestamp_error`，先判断类型再解析：
+  - `analyze.article_id` 非空字符串校验，畸形返回 `INVALID_ARTICLE_ID`；
+  - `notify.notification_id` 同理返回 `INVALID_NOTIFICATION_ID`；
+  - `notify_batch.channel` 只接受 `telegram`/`feishu`，`cutoff` 必须是可解析字符串；
+  - `daily_digest.start/end` 必须是可解析字符串且 `end > start`，否则 `INVALID_DIGEST_WINDOW`；
+  - 非 dict payload 返回 `INVALID_JOB_PAYLOAD`。
+  重试 API 将参数类拒绝映射为 422、来源缺失/文章缺失为 409、来源停用为 409，均带 `X-Error-Code`，不再出现 500。
+- **回归**：3 个畸形 `article_id`（list/dict/int）、2 个倒置/相等日报窗口、1 个非对象 payload，全部断言 422 且任务保持 `failed`、原 `attempt_count`/`last_error` 不变。
+
+## 审查修正 2：不可哈希的 `notify_batch.channel` 阻断 recover
+
+- **问题**：新增的 `channel not in {"telegram", "feishu"}` 在 JSON 值为 list/dict 时抛 `TypeError: unhashable type`，从 `recover` 抛出并阻断同一 tick 的所有后续任务。
+- **修复**：先 `isinstance(channel, str)` 再做集合成员判断，非字符串返回 `INVALID_CHANNEL`；新增校验中没有其他对不可信 JSON 值直接做集合成员判断的路径。
+- **回归**：3 个过期 `running` + 坏 channel 参数（list/dict/空 list），断言只有坏任务转为 `failed`，同一 tick 的有效 `collect` 仍执行。
+
+## 审查修正 3：并发删除时 `ObjectDeletedError`
+
+- **问题**：CAS `rowcount=0` 分支先 `rollback()`，随后 `session.get(Job, job.id)` 读取已被 rollback 过期的 ORM 对象属性；若该行已被 retention 并发删除，先抛 `ObjectDeletedError`，设计中的 404 无法返回。
+- **修复**：`retry_failed_job` 进入时保存普通字符串 `job_id`，CAS 条件与 rollback 后的重新查询都只使用它，不再读取过期对象属性。行不存在时抛出 `JOB_NOT_FOUND`（404），与 Worker 抢占的 `JOB_STATE_CHANGED`（409）区分。
+- **回归**：`test_retry_reports_concurrent_removal_as_not_found` 用第二个 session 删除行后调用服务函数；修复前实测抛 `ObjectDeletedError`，修复后返回 `JOB_NOT_FOUND`/404，行确已不存在。
+
+## 保留的既有行为
+
+- 重试仍使用 `update(... where status='failed')` 条件更新，不覆盖已被 Worker 抢占为 `running` 的行。
+- 活跃业务键（`pending`/`retry_wait`/`running`）去重，重复点击幂等；通知任务仍禁止手动重试。
+- 重试不重置 `attempt_count`、`last_error`，不改 `Analysis` 预算/用量；`scheduled_at` 设为当前时间。
+- 界面批量重试逐条调用 `soft=True` 的 API：单条失败不再 `st.stop()` 吞掉已入队结果，分别汇总「已入队 / 已去重 / 失败（含任务 ID 与原因）」；测试覆盖一条成功、一条来源停用的部分失败场景。
+
+## 验收结果
+
+- `env -u PYTHONPATH PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/pytest -q` → `110 passed`（起始 67 passed/3 failed；本轮新增 10 个 mock 回归：3 畸形 `article_id`、2 倒置/相等日报窗口、1 非对象 payload、1 并发删除、3 不可哈希 channel）。期间 Codex 已单独提交事件关联修复并扩充事件用例，本任务未修改 `event_matcher`。
+- `.venv/bin/ruff check .`、`.venv/bin/ruff format --check .` → 通过。
+- 未启动服务、未使用真实凭据、未写入真实数据库、未 commit/push；`docs/benchmark.json` 未改动。
+- 起始的 3 个失败均已按根因修复（截断 ID 键、标题断言、进程级限流隔离），未删除或弱化行为覆盖。

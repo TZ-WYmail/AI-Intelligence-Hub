@@ -29,7 +29,7 @@ from app.models import (
 from app.notifications.adapters import recipient_key
 from app.schemas import IndustryInput, ReadingPatch, ReportRequest, SourceInput
 from app.services.pipeline import collector
-from app.services.queue import enqueue
+from app.services.queue import JobRetryRejected, enqueue, retry_failed_job
 from app.services.source_health import publication_health
 
 app = FastAPI(title="AI Intelligence Hub", version="0.1.0", docs_url="/docs")
@@ -497,10 +497,32 @@ def notification_test(db: DB, channel: str = Query(pattern="^(telegram|feishu)$"
 
 
 @app.get("/api/v1/jobs", dependencies=AUTH)
-def jobs(db: DB, offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200)):
-    return [
-        row(v) for v in db.scalars(select(Job).order_by(Job.scheduled_at.desc()).offset(offset).limit(limit))
-    ]
+def jobs(
+    db: DB,
+    status: str = Query("all", pattern="^(all|pending|retry_wait|running|completed|failed)$"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+):
+    query = select(Job)
+    if status != "all":
+        query = query.where(Job.status == status)
+    return [row(v) for v in db.scalars(query.order_by(Job.scheduled_at.desc()).offset(offset).limit(limit))]
+
+
+@app.post("/api/v1/jobs/{identity}/retry", dependencies=AUTH)
+def retry_job(identity: str, db: DB):
+    job = required(db, Job, identity)
+    try:
+        queued_job, queued = retry_failed_job(db, job)
+    except JobRetryRejected as exc:
+        raise HTTPException(exc.status_code, exc.detail, headers={"X-Error-Code": exc.code}) from None
+    return {
+        "queued": queued,
+        "job_id": queued_job.id,
+        "job_type": queued_job.job_type,
+        "status": queued_job.status,
+        "deduplicated": not queued,
+    }
 
 
 @app.get("/api/v1/metrics", dependencies=AUTH)

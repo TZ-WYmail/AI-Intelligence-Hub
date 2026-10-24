@@ -1,12 +1,15 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import case, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models import Analysis, Job, Notification, now
+from app.models import Analysis, Article, Job, Notification, Source, now
 from app.processing.normalizer import timestamp
+
+ACTIVE_JOB_STATUSES = ("pending", "retry_wait", "running")
+RETRYABLE_JOB_TYPES = frozenset({"collect", "analyze", "daily_digest", "backup"})
 
 
 class InvalidJobPayload(ValueError):
@@ -17,39 +20,183 @@ class InvalidJobPayload(ValueError):
         self.code = code
 
 
+class JobRetryRejected(ValueError):
+    """A failed job cannot be safely requeued; carries the HTTP response contract."""
+
+    def __init__(self, code: str, detail: str, status_code: int = 409) -> None:
+        super().__init__(code)
+        self.code = code
+        self.detail = detail
+        self.status_code = status_code
+
+
+def identifier_error(value) -> str | None:
+    """Reject empty and non-string identifiers instead of trusting truthiness.
+
+    A list/dict/int is truthy but cannot address a row safely; letting it reach a
+    query either raises an opaque 500 or silently matches nothing.
+    """
+    if not value:
+        return "MISSING"
+    if not isinstance(value, str) or not value.strip():
+        return "INVALID"
+    return None
+
+
+def timestamp_error(value) -> tuple[datetime | None, str | None]:
+    """Parse a payload timestamp, rejecting non-string values that ``timestamp`` coerces."""
+    if not value:
+        return None, "MISSING"
+    if not isinstance(value, str):
+        return None, "INVALID"
+    try:
+        return timestamp(value), None
+    except (TypeError, ValueError, OverflowError):
+        return None, "INVALID"
+
+
 def payload_error(job: Job) -> str | None:
     """Return a short error code when a job is missing or carries unusable parameters."""
     payload = job.payload
     if not isinstance(payload, dict):
         return "INVALID_JOB_PAYLOAD"
     if job.job_type == "collect":
-        return None if job.source_id else "MISSING_SOURCE_ID"
+        return "MISSING_SOURCE_ID" if identifier_error(job.source_id) else None
     if job.job_type == "analyze":
-        return None if payload.get("article_id") else "MISSING_ARTICLE_ID"
+        error = identifier_error(payload.get("article_id"))
+        return ("MISSING_ARTICLE_ID" if error == "MISSING" else "INVALID_ARTICLE_ID") if error else None
     if job.job_type == "notify":
-        return None if payload.get("notification_id") else "MISSING_NOTIFICATION_ID"
+        error = identifier_error(payload.get("notification_id"))
+        return (
+            ("MISSING_NOTIFICATION_ID" if error == "MISSING" else "INVALID_NOTIFICATION_ID")
+            if error
+            else None
+        )
     if job.job_type == "notify_batch":
-        if not payload.get("channel"):
+        channel = payload.get("channel")
+        if not channel:
             return "MISSING_CHANNEL"
-        if not payload.get("cutoff"):
-            return "MISSING_CUTOFF"
-        try:
-            timestamp(payload["cutoff"])
-        except (TypeError, ValueError, OverflowError):
-            return "INVALID_CUTOFF"
+        # Membership tests on untrusted JSON must not see list/dict values: an
+        # unhashable payload would raise TypeError out of recover and abort the
+        # whole tick instead of failing only this job.
+        if not isinstance(channel, str) or channel not in {"telegram", "feishu"}:
+            return "INVALID_CHANNEL"
+        _, error = timestamp_error(payload.get("cutoff"))
+        if error:
+            return "MISSING_CUTOFF" if error == "MISSING" else "INVALID_CUTOFF"
         return None
     if job.job_type == "daily_digest":
-        for field in ("start", "end"):
-            if not payload.get(field):
+        start, start_error = timestamp_error(payload.get("start"))
+        end, end_error = timestamp_error(payload.get("end"))
+        if start_error or end_error:
+            if "MISSING" in {start_error, end_error}:
                 return "MISSING_DIGEST_WINDOW"
-            try:
-                timestamp(payload[field])
-            except (TypeError, ValueError, OverflowError):
-                return "INVALID_DIGEST_WINDOW"
+            return "INVALID_DIGEST_WINDOW"
+        if end <= start:
+            return "INVALID_DIGEST_WINDOW"
         return None
     if job.job_type == "backup":
         return None
     return "UNKNOWN_JOB_TYPE"
+
+
+def job_business_key(job: Job) -> str:
+    """Canonical enqueue key for the business work a retryable job represents."""
+    if job.job_type == "collect":
+        return "collect:" + str(job.source_id)
+    if job.job_type == "analyze":
+        return "analyze:" + str(job.payload["article_id"])
+    if job.job_type == "daily_digest":
+        return "digest:" + str(job.payload["start"])
+    if job.job_type == "backup":
+        return "maintenance:backup"
+    raise ValueError("UNKNOWN_JOB_TYPE")
+
+
+def retry_rejection(session: Session, job: Job) -> JobRetryRejected | None:
+    """Validate every precondition before a failed job may be requeued."""
+    if job.job_type in {"notify", "notify_batch"}:
+        return JobRetryRejected("NOTIFICATION_RETRY_FORBIDDEN", "通知任务不支持手动重试")
+    if job.job_type not in RETRYABLE_JOB_TYPES:
+        return JobRetryRejected("UNSUPPORTED_JOB_TYPE", "该任务类型不支持手动重试")
+    error = payload_error(job)
+    if error:
+        return JobRetryRejected("INVALID_JOB_PAYLOAD", f"任务参数无效（{error}），无法安全重试", 422)
+    if job.job_type == "collect":
+        source = session.get(Source, job.source_id)
+        if source is None:
+            return JobRetryRejected("SOURCE_MISSING", "来源不存在，无法重试")
+        if not source.enabled:
+            return JobRetryRejected("SOURCE_DISABLED", "来源已停用，请先启用")
+    elif job.job_type == "analyze" and session.get(Article, job.payload["article_id"]) is None:
+        return JobRetryRejected("ARTICLE_MISSING", "文章不存在，无法重试")
+    return None
+
+
+def retry_failed_job(session: Session, job: Job) -> tuple[Job, bool]:
+    """Requeue exactly one failed job; returns (job, whether this call queued it).
+
+    The transition uses a compare-and-set on status='failed'. A Worker may claim
+    the row between our read and write, so a read-only status check is never
+    enough. Failure history (attempt_count, last_error) is intentionally kept.
+    """
+    # Keep a plain identifier: rollback expires the ORM object, and a concurrent
+    # retention delete would make reading ``job.id`` raise ObjectDeletedError
+    # instead of the intended 404 response.
+    job_id = job.id
+    if job.job_type in {"notify", "notify_batch"}:
+        raise JobRetryRejected("NOTIFICATION_RETRY_FORBIDDEN", "通知任务不支持手动重试")
+    if job.job_type not in RETRYABLE_JOB_TYPES:
+        raise JobRetryRejected("UNSUPPORTED_JOB_TYPE", "该任务类型不支持手动重试")
+    if job.status in {"pending", "retry_wait"}:
+        return job, False
+    if job.status == "running":
+        raise JobRetryRejected("JOB_RUNNING", "任务正在运行，不能重试")
+    if job.status == "completed":
+        raise JobRetryRejected("JOB_COMPLETED", "任务已完成，不能重试")
+    if job.status != "failed":
+        raise JobRetryRejected("JOB_NOT_FAILED", "只有失败任务可以重试")
+
+    rejection = retry_rejection(session, job)
+    if rejection:
+        raise rejection
+
+    key = job_business_key(job)
+    active = session.scalar(
+        select(Job).where(
+            Job.dedup_key == key,
+            Job.id != job_id,
+            Job.status.in_(ACTIVE_JOB_STATUSES),
+        )
+    )
+    if active:
+        return active, False
+    try:
+        changed = session.execute(
+            update(Job)
+            .where(Job.id == job_id, Job.status == "failed")
+            .values(status="pending", scheduled_at=now(), dedup_key=key)
+        )
+    except IntegrityError:
+        # A concurrent retry/enqueue took the canonical business key first.
+        session.rollback()
+        active = session.scalar(select(Job).where(Job.dedup_key == key, Job.status.in_(ACTIVE_JOB_STATUSES)))
+        if active:
+            return active, False
+        raise JobRetryRejected("RETRY_CONFLICT", "任务状态冲突，请刷新后重试") from None
+    if changed.rowcount != 1:
+        # The row left 'failed' after our read (claimed by a Worker, or removed
+        # by retention). Re-read by stored id only; never touch the expired object.
+        session.rollback()
+        current = session.get(Job, job_id)
+        if current is None:
+            raise JobRetryRejected("JOB_NOT_FOUND", "任务不存在", 404)
+        if current.status in {"pending", "retry_wait"}:
+            return current, False
+        raise JobRetryRejected("JOB_STATE_CHANGED", "任务状态已变化，不能重试")
+    session.commit()
+    session.refresh(job)
+    return job, True
 
 
 def notifications_for_job(session: Session, job: Job) -> list[Notification]:
