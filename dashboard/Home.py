@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -110,9 +110,43 @@ def localtime(value):
     return datetime.fromisoformat(value).astimezone(tz).strftime("%m-%d %H:%M")
 
 
+# Display-only threshold: the scheduler heartbeats about every 10s and the
+# worker about every 30s, but a stalled collection may delay a worker beat.
+HEARTBEAT_RECENT = timedelta(minutes=5)
+
+
+def heartbeat_status(value, current=None):
+    """Describe a heartbeat by age only; never infer process health from it."""
+    if not value:
+        return "暂无记录"
+    try:
+        seen = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return "时间不可解析"
+    if seen.tzinfo is None:
+        return "时间缺少时区"
+    current = current or datetime.now(tz)
+    age = current - seen.astimezone(tz)
+    if age.total_seconds() < 0:
+        return "记录时间在未来，无法判断"
+    if age > HEARTBEAT_RECENT:
+        return "未观测到近期心跳"
+    return "近期有心跳"
+
+
+def heartbeat_line(value):
+    status = heartbeat_status(value)
+    if status in {"暂无记录", "时间不可解析", "时间缺少时区"}:
+        return status
+    return f"{localtime(value)} · {status}"
+
+
 if show_heading:
-    st.caption(f"多行业实时监控 / {datetime.now(tz).strftime('%Y年%m月%d日')} / {config['timezone']}")
-    if st.button("刷新数据", type="secondary"):
+    context_col, refresh_col = st.columns([6, 1], vertical_alignment="center")
+    context_col.caption(
+        f"多行业实时监控 / {datetime.now(tz).strftime('%Y年%m月%d日')} / {config['timezone']}"
+    )
+    if refresh_col.button("刷新数据", type="secondary", width="stretch"):
         st.rerun()
 industries = api("industries")
 industry_names = {v["id"]: v["name"] for v in industries}
@@ -130,6 +164,14 @@ if page == "概览":
             strict=False,
         ):
             col.metric(label, stats[field])
+        st.caption(
+            "指标统计最近 24 小时；下方列表与心跳是库中最新记录，不代表发生在 24 小时内或当前正在运行。"
+        )
+        if stats["articles_24h"] == 0:
+            st.info(
+                "最近 24 小时没有新文章。可前往「实时新闻」查看库中历史文章，"
+                "或在下方图表中将范围切换为最近 30 天；图表范围不会自动改变。"
+            )
 
     overview_metrics()
     from visuals import render_visuals
@@ -143,6 +185,7 @@ if page == "概览":
         left, right = st.columns([2, 1])
         with left:
             st.subheader("最新情报")
+            st.caption("库中最新文章，不限 24 小时。")
             for item in api("articles", params={"limit": 8})["items"]:
                 with st.container(border=True, key=theme.card_key("overview-" + item["id"])):
                     st.caption(
@@ -156,11 +199,14 @@ if page == "概览":
             st.metric("采集成功率", f"{rate:.1%}" if rate is not None else "暂无采集")
             st.metric("待处理任务", stats["backlog"])
             st.write("最近采集：", localtime(stats["last_collection"]))
-            st.write("调度心跳：", localtime(stats["scheduler_last_seen"]))
-            st.write("Worker 心跳：", localtime(stats.get("worker_last_seen")))
+            st.write("调度心跳：", heartbeat_line(stats["scheduler_last_seen"]))
+            st.write("Worker 心跳：", heartbeat_line(stats.get("worker_last_seen")))
             st.write("分析模式：", "AI + 规则" if stats["ai_enabled"] else "规则降级模式")
             st.metric("累计估算 AI 费用", f"¥{stats['ai_estimated_cost_cny']:.4f}")
-            st.caption("延迟指标需基于实际采集和通知数据评估。")
+            st.caption(
+                "心跳仅按最近记录时间判断（5 分钟内视为近期），不代表服务健康；"
+                "延迟指标需基于实际采集和通知数据评估。"
+            )
 
     recent_news()
 

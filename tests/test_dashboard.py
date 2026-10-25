@@ -1,3 +1,4 @@
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import urlsplit
@@ -7,7 +8,7 @@ from streamlit.testing.v1 import AppTest
 
 from app.db import get_session
 from app.main import app
-from app.models import Job, Source, now
+from app.models import Job, Metric, Source, now
 
 
 def test_dashboard_pages(db):
@@ -170,3 +171,70 @@ def test_dashboard_non_json_gateway_error_stops_safely():
         assert not ui.metric
         assert not ui.dataframe
         assert not ui.subheader
+
+
+def test_overview_labels_heartbeats_by_age_without_calling_them_healthy(db):
+    db.add(
+        Metric(
+            metric_name="scheduler_heartbeat",
+            metric_value=1,
+            recorded_at=now() - timedelta(days=7),
+        )
+    )
+    future_beat = Metric(
+        metric_name="worker_heartbeat",
+        metric_value=1,
+        recorded_at=now() + timedelta(hours=2),
+    )
+    db.add(future_beat)
+    db.commit()
+    app.dependency_overrides[get_session] = lambda: db
+    try:
+        with TestClient(app) as client:
+
+            def request(method, url, **kwargs):
+                parsed = urlsplit(url)
+                return client.request(
+                    method,
+                    parsed.path,
+                    headers=kwargs.get("headers"),
+                    json=kwargs.get("json"),
+                    params=kwargs.get("params"),
+                )
+
+            with patch("httpx.request", request):
+                ui = AppTest.from_file(str(Path("dashboard/Home.py").resolve()), default_timeout=20).run()
+                ui.text_input[0].input("test-admin").run()
+                assert not ui.exception
+
+                lines = "\n".join(item.value for item in ui.markdown)
+                assert "调度心跳：" in lines and "未观测到近期心跳" in lines
+                assert "Worker 心跳：" in lines and "记录时间在未来，无法判断" in lines
+                assert "近期有心跳" not in lines
+                assert any("最近 24 小时没有新文章" in item.value for item in ui.info)
+                assert any("库中最新文章，不限 24 小时" in item.value for item in ui.caption)
+
+                # Missing worker heartbeat is reported as no record, never as healthy.
+                db.delete(future_beat)
+                db.commit()
+                ui.run()
+                assert not ui.exception
+                lines = "\n".join(item.value for item in ui.markdown)
+                assert "Worker 心跳：" in lines and "暂无记录" in lines
+                assert "近期有心跳" not in lines
+
+                # A genuinely recent heartbeat is the only case labelled recent.
+                db.add(
+                    Metric(
+                        metric_name="worker_heartbeat",
+                        metric_value=1,
+                        recorded_at=now(),
+                    )
+                )
+                db.commit()
+                ui.run()
+                assert not ui.exception
+                lines = "\n".join(item.value for item in ui.markdown)
+                assert "Worker 心跳：" in lines and "近期有心跳" in lines
+    finally:
+        app.dependency_overrides.clear()
