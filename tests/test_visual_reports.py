@@ -218,19 +218,20 @@ def test_split_daily_and_custom_reports_without_losing_entries():
 
 def test_report_ui_pages_preserve_custom_results_and_reset_sizes(news_client, db):
     markdown = "# 每日简报\n\n时间范围\n\n" + "\n".join(
-        f"## Entry {i:02}\n\nUnique summary {i:02}\n" for i in range(12)
+        f"## Entry {i:02}\n\n85 分 · AI · 未独立核验\n\nUnique summary {i:02}\n" for i in range(12)
     )
     digest = Digest(
         title="Fixture brief",
         period_start=now() - timedelta(days=1),
         period_end=now(),
-        article_count=12,
+        article_count=927,
         markdown=markdown,
     )
     db.add(digest)
     db.commit()
     custom = "# 自定义简报\n\n" + "\n".join(
-        f"- [Custom {i:02}](https://example.com/{i})\n  Custom summary {i:02}" for i in range(12)
+        f"- [Custom {i:02}](https://example.com/{i}) · 85分 · unverified\n  Custom summary {i:02}"
+        for i in range(12)
     )
 
     def request(method, url, **kwargs):
@@ -249,20 +250,88 @@ def test_report_ui_pages_preserve_custom_results_and_reset_sizes(news_client, db
         ui.text_input[0].input("test-admin").run()
         ui.sidebar.radio[0].set_value("简报").run()
         assert not ui.exception
+        assert any("统计区间" in item.value for item in ui.caption)
+        assert any("结束时刻不含" in item.value for item in ui.caption)
+        assert any("生成时间" in item.value for item in ui.caption)
+        assert any("条目预览未经独立核验" in item.value for item in ui.caption)
+        assert any("统计范围内文章总量：927 篇 · 入选情报：12 条" in item.value for item in ui.caption)
+        assert any(expander.label == "查看原始报告时间范围与说明" for expander in ui.expander)
         assert any("Entry 00" in item.value for item in ui.markdown)
         assert not any("Entry 05" in item.value for item in ui.markdown)
+        page_text = "\n".join(item.value for item in ui.markdown)
+        assert page_text.count("Unique summary 00") == 2
+        assert "未独立核验" in page_text
         ui.button(key="daily_brief_next").click().run()
         assert any("Entry 05" in item.value for item in ui.markdown)
         assert not any("Entry 00" in item.value for item in ui.markdown)
         ui.selectbox(key="daily_brief_size").set_value(10).run()
         assert ui.number_input(key="daily_brief_page").value == 1
         assert any("Entry 09" in item.value for item in ui.markdown)
+        ui.button(key="daily_brief_bottom_next").click().run()
+        assert ui.number_input(key="daily_brief_page").value == 2
+        assert any("Entry 10" in item.value for item in ui.markdown)
+        assert not any("Entry 00" in item.value for item in ui.markdown)
+        ui.button(key="daily_brief_bottom_previous").click().run()
+        assert ui.number_input(key="daily_brief_page").value == 1
+        assert any("Entry 00" in item.value for item in ui.markdown)
         next(button for button in ui.button if button.label == "生成 Markdown 简报").click().run()
         assert not ui.exception
+        custom_header = next(item for item in ui.expander if item.label == "自定义时间范围")
+        assert any("入选情报：12 条" in item.value for item in custom_header.caption)
+        assert not any("统计范围内文章总量" in item.value for item in custom_header.caption)
         assert any("Custom 00" in item.value for item in ui.markdown)
+        custom_text = "\n".join(item.value for item in ui.markdown)
+        assert custom_text.count("Custom summary 00") == 2
+        assert "https://example.com/0" in custom_text and "unverified" in custom_text
         ui.button(key="custom_brief_next").click().run()
         assert any("Custom 05" in item.value for item in ui.markdown)
         assert not any("Custom 00" in item.value for item in ui.markdown)
         ui.button(key="custom_brief_next").click().run()
         assert any("Custom 11" in item.value for item in ui.markdown)
         assert ui.button(key="custom_brief_next").disabled
+        assert ui.button(key="custom_brief_bottom_next").disabled
+
+
+def test_briefs_defang_markdown_images_but_keep_raw_download(news_client, db):
+    markdown = (
+        "# 每日简报\n\n"
+        "![remote3](https://evil.example/header.png) 说明\n\n"
+        "[track]: https://evil.example/ref.png\n\n"
+        "## Title ![remote2](https://evil.example/title.png)\n\n"
+        "85 分 · AI · 未独立核验\n\n"
+        "Safe summary ![remote](https://evil.example/x.png) ![ref][track] "
+        "\\![escaped](https://evil.example/esc.png) and [source](https://example.com/ok).\n"
+    )
+    digest = Digest(
+        title="Report ![title](https://evil.example/title.png)",
+        period_start=now() - timedelta(days=1),
+        period_end=now(),
+        article_count=1,
+        markdown=markdown,
+    )
+    db.add(digest)
+    db.commit()
+
+    def request(method, url, **kwargs):
+        return news_client.request(
+            method,
+            urlsplit(url).path,
+            headers=kwargs.get("headers"),
+            json=kwargs.get("json"),
+            params=kwargs.get("params"),
+        )
+
+    with patch("httpx.request", request), patch("dashboard.briefs.st.download_button") as download:
+        ui = AppTest.from_file(str(Path("dashboard/Home.py").resolve()), default_timeout=30).run()
+        ui.text_input[0].input("test-admin").run()
+        ui.sidebar.radio[0].set_value("简报").run()
+        assert not ui.exception
+
+    displayed = "\n".join(item.value for item in ui.markdown)
+    subheaders = "\n".join(item.value for item in ui.subheader)
+    assert "Safe summary" in displayed and "https://example.com/ok" in displayed
+    assert "![" not in displayed and "![" not in subheaders
+    assert "!\\[" in displayed and "!\\[" in subheaders
+    args, _ = download.call_args
+    assert args[1] == markdown
+    assert "![remote]" in args[1] and "[track]:" in args[1] and "\\![escaped]" in args[1]
