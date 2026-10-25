@@ -11,6 +11,18 @@ import streamlit as st
 
 PALETTE = ["#62dfc7", "#7eafff", "#c09cff", "#ffc575", "#ff8599", "#73c9e8", "#c5d97b", "#bdad96", "#65768e"]
 BACKGROUND = "#0c111b"
+HEAT_STOPS = [
+    (0.0, "#112b48"),
+    (0.08, "#173e5b"),
+    (0.25, "#176d80"),
+    (0.5, "#24b5a1"),
+    (0.75, "#f1c26a"),
+    (1.0, "#ff815b"),
+]
+HEAT_SCALE = [[stop, color] for stop, color in HEAT_STOPS]
+HEAT_GRADIENT = (
+    "linear-gradient(90deg, " + ", ".join(f"{color} {stop * 100:g}%" for stop, color in HEAT_STOPS) + ")"
+)
 
 
 def xyz(lat, lon, radius=1):
@@ -52,6 +64,34 @@ def style(figure: go.Figure, height=320) -> go.Figure:
     return figure
 
 
+def heat_legend() -> None:
+    """Static legend; only text and the shared gradient, never external content."""
+    st.markdown(
+        f"""
+<div role="img" aria-label="相对热度色阶：从低到高。按当前范围和当前依据内的最大值相对归一化，不是风险等级。"
+     style="display:flex;align-items:center;gap:.55rem;margin:.1rem 0 .35rem;color:#97a9c0;font-size:.78rem">
+  <span style="color:#dce5f2;font-weight:600">相对热度</span>
+  <span>低</span>
+  <span aria-hidden="true" style="flex:1;height:8px;border:1px solid #2a3a51;border-radius:999px;background:{HEAT_GRADIENT}"></span>
+  <span>高</span>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+    st.caption("色阶按当前范围和当前依据内的最大值相对归一化；只表示相对数量，不是风险等级。")
+
+
+def region_count_rows(regions: list[dict], field: str, mapped: int, total: int) -> list[dict]:
+    """Build the accessible fallback table; unknown regions stay out of the map data."""
+    active = sorted(
+        (region for region in regions if region[field] > 0),
+        key=lambda region: (-region[field], region["name"], region["id"]),
+    )
+    rows = [{"地区": region["name"], "当前依据文章数": region[field]} for region in active]
+    rows.append({"地区": "地区未知（未定位）", "当前依据文章数": max(total - mapped, 0)})
+    return rows
+
+
 def globe_figure(regions: list[dict], field: str, revision: str) -> go.Figure:
     active = [region for region in regions if region[field] > 0]
     lat, lon = np.meshgrid(np.linspace(-90, 90, 73), np.linspace(-180, 180, 145), indexing="ij")
@@ -70,14 +110,7 @@ def globe_figure(regions: list[dict], field: str, revision: str) -> go.Figure:
             surfacecolor=np.clip(heat, 0, 1),
             cmin=0,
             cmax=1,
-            colorscale=[
-                [0, "#112b48"],
-                [0.08, "#173e5b"],
-                [0.25, "#176d80"],
-                [0.5, "#24b5a1"],
-                [0.75, "#f1c26a"],
-                [1, "#ff815b"],
-            ],
+            colorscale=HEAT_SCALE,
             showscale=False,
             hoverinfo="skip",
             lighting={"ambient": 0.85, "diffuse": 0.5, "specular": 0.05},
@@ -195,12 +228,23 @@ def render_visuals(api) -> None:
         f"按发现时间统计 · {data['timezone']} · 共 {data['total_articles']:,} 篇文章 · 切换范围或点击刷新更新图表，不新增 AI 调用"
     )
     mapped = data["mention_matched_articles"] if mode == "mentions" else data["source_mapped_articles"]
+    mode_label = {"mentions": "新闻明确提及的地区", "source_articles": "数据源登记的地区"}[mode]
     active = [region for region in data["regions"] if region[mode] > 0]
     left, right = st.columns([1.35, 1])
     with left:
         st.caption(
             f"全球热点 / {len(active)} 个地区 · {mapped:,} 篇有地区依据 · {data['total_articles'] - mapped:,} 篇地区未知"
         )
+        if active:
+            heat_legend()
+        else:
+            if data["total_articles"] == 0:
+                reason = "当前时间范围没有文章，因此没有可定位的地区依据。"
+            elif mapped == 0:
+                reason = "当前范围内的文章没有可定位的地区依据。"
+            else:
+                reason = "当前依据下没有可定位的地区。"
+            st.info(f"{reason}地图不会生成热区，地区未知的报道也不会标注在地图上。")
         st.plotly_chart(
             globe_figure(data["regions"], mode, str(st.session_state.get("_globe_revision", 0)) + mode),
             key="globe_chart",
@@ -214,6 +258,18 @@ def render_visuals(api) -> None:
             )
         else:
             st.caption("仅使用来源已登记的地区；不会根据域名猜测，来源所在地不等于新闻发生地。")
+        if data["total_articles"]:
+            with st.expander("地区数量表（地图不可用/屏幕阅读辅助）", expanded=False):
+                multi_region = "同一篇文章可计入多个提及地区；" if mode == "mentions" else ""
+                st.caption(
+                    f"当前依据：{mode_label}。按文章数降序，同数按地区名称排序；仅列大于 0 的地区。"
+                    f"{multi_region}未知地区单列在最后一行，不映射到地图。"
+                )
+                st.table(
+                    region_count_rows(data["regions"], mode, mapped, data["total_articles"]),
+                    hide_index=True,
+                    alt=f"地区数量表：{mode_label}；地区未知单列，不映射到地图",
+                )
     industries = [item for item in data["industries"] if item["count"] > 0]
     color_map = {item["id"]: PALETTE[index % len(PALETTE)] for index, item in enumerate(data["industries"])}
     industries.sort(key=lambda item: item["count"])

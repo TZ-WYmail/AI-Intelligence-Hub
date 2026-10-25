@@ -13,6 +13,51 @@ from dashboard.briefs import split_report
 from dashboard.visuals import globe_figure, trend_figure
 
 
+def _visual_data(**overrides):
+    data = {
+        "timezone": "Asia/Shanghai",
+        "total_articles": 3,
+        "mention_matched_articles": 0,
+        "source_mapped_articles": 0,
+        "regions": [
+            {
+                "id": "CN",
+                "name": "中国",
+                "lat": 35,
+                "lon": 104,
+                "mentions": 0,
+                "source_articles": 0,
+                "samples": [],
+            }
+        ],
+        "industries": [{"id": "ai", "name": "AI", "count": 3, "timeline": [3]}],
+        "timeline": [{"time": "10-25", "count": 3}],
+        "importance": [
+            {"id": "critical", "count": 0},
+            {"id": "important", "count": 1},
+            {"id": "ordinary", "count": 2},
+            {"id": "unscored", "count": 0},
+        ],
+        "thresholds": {"critical": 85, "important": 60},
+        "sources": [{"name": "Fixture", "count": 3}],
+        "languages": [{"name": "en", "count": 3}],
+    }
+    data.update(overrides)
+    return data
+
+
+def _run_visuals(data):
+    code = (
+        "import streamlit as st\n"
+        "from dashboard.visuals import render_visuals\n"
+        f"DATA = {data!r}\n"
+        "def api(path, params=None):\n"
+        "    return DATA\n"
+        "render_visuals(api)\n"
+    )
+    return AppTest.from_string(code, default_timeout=20).run()
+
+
 def test_region_matching_requires_text_and_handles_nested_names():
     assert dict(mentioned_regions("China and 中国 work with United States")) == {
         "US": "United States",
@@ -67,6 +112,67 @@ def test_globe_works_with_no_regions_and_preserves_camera_revision():
     trend = trend_figure([{"time": "12-31", "count": 1}, {"time": "01-01", "count": 2}])
     assert trend.layout.xaxis.type == "category"
     assert list(trend.data[0].x) == ["12-31", "01-01"]
+
+
+def test_globe_without_evidence_explains_gap_and_keeps_unknown_out_of_map_data():
+    ui = _run_visuals(_visual_data())
+    assert not ui.exception
+    assert any("没有可定位的地区依据" in item.value for item in ui.info)
+    table = ui.table[0].value
+    assert table["地区"].tolist() == ["地区未知（未定位）"]
+    assert table["当前依据文章数"].tolist() == [3]
+    assert not any("相对热度" in item.value for item in ui.markdown)
+
+    ui = _run_visuals(
+        _visual_data(
+            total_articles=4,
+            mention_matched_articles=3,
+            regions=[
+                {
+                    "id": "B",
+                    "name": "Beta",
+                    "lat": 10,
+                    "lon": 10,
+                    "mentions": 2,
+                    "source_articles": 0,
+                    "samples": [],
+                },
+                {
+                    "id": "A",
+                    "name": "Alpha",
+                    "lat": 20,
+                    "lon": 20,
+                    "mentions": 1,
+                    "source_articles": 0,
+                    "samples": [],
+                },
+                {
+                    "id": "C",
+                    "name": "Gamma",
+                    "lat": 30,
+                    "lon": 30,
+                    "mentions": 1,
+                    "source_articles": 0,
+                    "samples": [],
+                },
+                {
+                    "id": "D",
+                    "name": "Delta",
+                    "lat": 40,
+                    "lon": 40,
+                    "mentions": 0,
+                    "source_articles": 0,
+                    "samples": [],
+                },
+            ],
+        )
+    )
+    assert not ui.exception
+    assert any("相对热度" in item.value for item in ui.markdown)
+    assert any("不是风险等级" in item.value for item in ui.caption)
+    table = ui.table[0].value
+    assert table["地区"].tolist() == ["Beta", "Alpha", "Gamma", "地区未知（未定位）"]
+    assert table["当前依据文章数"].tolist() == [2, 1, 1, 1]
 
 
 def test_split_daily_and_custom_reports_without_losing_entries():
