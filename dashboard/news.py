@@ -23,10 +23,13 @@ STYLES = """<style>
 .news-summary-label {margin:.75rem 0 .15rem;font-size:.74rem;font-weight:600;letter-spacing:.02em;color:var(--aih-accent)}
 .news-summary-label.source {color:var(--aih-muted)}
 .news-excerpt {font-size:.96rem;line-height:1.8;color:var(--aih-text);overflow-wrap:anywhere;white-space:pre-wrap}
-.reader-title {font-size:clamp(1.6rem,3vw,2.3rem);font-weight:650;line-height:1.45;margin:18px 0;color:#f1f5fc;overflow-wrap:anywhere}
-.reading-prose {line-height:1.95;color:#dce5f2;white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0 22px}
-.reader-section {font-size:1.08rem;font-weight:650;letter-spacing:.02em;margin:26px 0 10px;color:#71d9c2}
-.reader-fact {padding:12px 18px;margin:12px 0;border-left:3px solid #4fb6a1;background:#13232d;border-radius:0 8px 8px 0}
+.reader-kicker {margin:0 0 .35rem;color:var(--aih-accent);font-size:.76rem;font-weight:600;letter-spacing:.05em;overflow-wrap:anywhere}
+.reader-title {font-size:clamp(1.6rem,3vw,2.3rem);font-weight:650;line-height:1.35;margin:0 0 .45rem;color:var(--aih-text-strong);overflow-wrap:anywhere;word-break:break-word}
+.reader-meta {display:flex;flex-wrap:wrap;gap:.2rem .6rem;margin:.2rem 0 .45rem;color:var(--aih-muted);font-size:.82rem;line-height:1.6}
+.reader-meta .reader-mode {color:var(--aih-text);font-weight:600}
+.reading-prose {line-height:1.9;color:var(--aih-text);white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 1.05rem}
+.reader-section {font-size:1.06rem;font-weight:650;letter-spacing:.02em;margin:1.9rem 0 .55rem;color:var(--aih-accent)}
+.reader-fact {padding:12px 18px;margin:0 0 1rem;border-left:3px solid var(--aih-accent-strong);background:var(--aih-panel);border-radius:0 8px 8px 0}
 [class*="st-key-aih-card-news-"] [data-testid="stButton"] button {background:var(--aih-accent);border-color:var(--aih-accent);color:#07231d;font-weight:700}
 [class*="st-key-aih-card-news-"] [data-testid="stButton"] button:hover {background:var(--aih-accent-strong);border-color:var(--aih-accent-strong);color:#041713}
 [data-testid=stMainBlockContainer]{max-width:1240px;padding-bottom:4rem}
@@ -169,6 +172,48 @@ def open_article(identity: str, ids: list[str]) -> None:
     st.session_state["_reader"] = {"id": identity, "ids": ids, "marked": False}
 
 
+def source_sections(summary: str, content: str | None) -> list[tuple[str, str]]:
+    """Return non-duplicate source sections; content is never dropped."""
+    summary_text = str(summary or "").strip()
+    content_text = str(content or "").strip()
+    if content_text == summary_text:
+        content_text = ""
+    sections = []
+    if summary_text:
+        sections.append(("来源摘要", summary_text))
+    if content_text:
+        sections.append(("来源正文", content_text))
+    return sections
+
+
+def reader_navigation(ids: list[str], index: int, location: str) -> None:
+    """Top and bottom navigation share behavior but use distinct widget keys."""
+    a, b, c = st.columns([2, 1, 1])
+    if a.button("← 返回列表", key=f"reader-{location}-back", use_container_width=True):
+        st.session_state.pop("_reader", None)
+        # Consuming unread entries changes offsets; resume at the start of that remaining collection.
+        if st.session_state.get("_news_filters", {}).get("reading_state") == "unread":
+            st.session_state["_news_filters"]["page"] = 1
+        st.rerun()
+    if b.button(
+        "上一篇",
+        key=f"reader-{location}-prev",
+        disabled=index == 0,
+        use_container_width=True,
+    ):
+        open_article(ids[index - 1], ids)
+        st.rerun()
+    if c.button(
+        "下一篇",
+        key=f"reader-{location}-next",
+        disabled=index == len(ids) - 1,
+        use_container_width=True,
+    ):
+        open_article(ids[index + 1], ids)
+        st.rerun()
+    st.caption(f"当前列表第 {index + 1} / {len(ids)} 篇 · 返回列表后可继续翻页")
+
+
 def render_reader(api, config: dict, names: dict, localtime) -> None:
     reader = st.session_state["_reader"]
     identity, ids = reader["id"], reader["ids"]
@@ -180,20 +225,7 @@ def render_reader(api, config: dict, names: dict, localtime) -> None:
             detail["read_at"] = changed["read_at"]
         reader["marked"] = True
     index = ids.index(identity)
-    a, b, c = st.columns([2, 1, 1])
-    if a.button("← 返回列表", use_container_width=True):
-        st.session_state.pop("_reader", None)
-        # Consuming unread entries changes offsets; resume at the start of that remaining collection.
-        if st.session_state.get("_news_filters", {}).get("reading_state") == "unread":
-            st.session_state["_news_filters"]["page"] = 1
-        st.rerun()
-    if b.button("上一篇", disabled=index == 0, use_container_width=True):
-        open_article(ids[index - 1], ids)
-        st.rerun()
-    if c.button("下一篇", disabled=index == len(ids) - 1, use_container_width=True):
-        open_article(ids[index + 1], ids)
-        st.rerun()
-    st.caption(f"当前列表第 {index + 1} / {len(ids)} 篇 · 返回列表后可继续翻页")
+    reader_navigation(ids, index, "top")
     prefs = st.session_state.get("_reading_preferences", {"size": 18, "width": "适中"})
     with st.popover("Aa 阅读设置"):
         size = st.select_slider("正文字号", options=[16, 18, 20, 22], value=prefs["size"])
@@ -207,19 +239,36 @@ def render_reader(api, config: dict, names: dict, localtime) -> None:
     ratios = {"紧凑": [2, 6, 2], "适中": [1, 8, 1], "宽松": [0.1, 9.8, 0.1]}[width]
     _, center, _ = st.columns(ratios)
     with center:
-        st.markdown(f'<div class="reader-title">{html.escape(detail["title"])}</div>', unsafe_allow_html=True)
         successful = [
             item for item in detail["analyses"] if item["status"] == "completed" and item["analysis_json"]
         ]
         ai = next((item for item in successful if item["provider"] == "openai-compatible"), None)
         rules = next((item for item in successful if item["provider"] == "rules"), None)
         result = ai["analysis_json"] if ai else {}
+        source = names.get(detail["source_id"], "来源")
         minutes = reading_minutes(
             (result.get("summary_zh") or detail["summary"]) + result.get("impact_analysis", "")
         )
-        st.caption(
-            f"{names.get(detail['source_id'], '来源')} · 发布 {localtime(detail['published_at'])} · 约 {minutes} 分钟阅读"
+        if ai and not config["ai_enabled"]:
+            mode_label = "历史 AI 解读"
+        elif ai:
+            mode_label = "AI 解读"
+        elif not config["ai_enabled"]:
+            mode_label = "规则/来源模式"
+        else:
+            mode_label = "暂无 AI 解读"
+        st.markdown(
+            f'<div class="reader-kicker">来源：{html.escape(source)}</div>',
+            unsafe_allow_html=True,
         )
+        st.markdown(f'<div class="reader-title">{html.escape(detail["title"])}</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="reader-meta"><span class="reader-mode">{html.escape(mode_label)}</span>'
+            f"<span>发布 {html.escape(localtime(detail['published_at']))}</span>"
+            f"<span>速读约 {minutes} 分钟</span></div>",
+            unsafe_allow_html=True,
+        )
+        st.caption("速读时间按当前摘要/中文速读内容估算，不代表全文阅读时间。")
         a, b, c = st.columns(3)
         a.link_button("打开来源原文 ↗", detail["original_url"], use_container_width=True)
         if b.button("★ 已收藏" if detail.get("bookmarked") else "☆ 收藏这篇", use_container_width=True):
@@ -234,7 +283,11 @@ def render_reader(api, config: dict, names: dict, localtime) -> None:
             st.rerun()
         if detail["publication_time_inferred"]:
             st.caption("时间说明：来源没有提供可靠发布时间，当前使用发现时间。")
-        st.caption("未独立核验 · AI 解读仅基于当前来源，不代表事实已被确认")
+        st.caption(
+            "未独立核验 · AI 解读仅基于当前来源，不代表事实已被确认"
+            if ai
+            else "未独立核验 · 当前仅展示来源/规则信息"
+        )
         speed, original, evidence = st.tabs(["中文速读", "原文摘要", "来源与处理"])
         with speed:
             if ai:
@@ -254,20 +307,28 @@ def render_reader(api, config: dict, names: dict, localtime) -> None:
                 if result.get("reasoning_summary"):
                     with st.expander("查看分析依据"):
                         st.write(result["reasoning_summary"])
+                st.markdown('<div class="reader-section">AI 生成信息</div>', unsafe_allow_html=True)
                 st.caption(
-                    f"{ai['model']} · 生成 {localtime(ai['created_at'])} · 估算费用 ¥{ai['estimated_cost']:.4f}"
+                    f"模型：{ai['model']} · 生成时间：{localtime(ai['created_at'])}"
+                    f" · 估算费用：¥{ai['estimated_cost']:.4f}"
                 )
+                if not config["ai_enabled"]:
+                    st.caption("当前 AI 调用未启用；以上为历史 AI 结果。")
             else:
-                st.info("这篇文章还没有中文 AI 解读。下面先展示来源摘要，阅读原文无需等待分析。")
-                prose(detail["summary"] or "来源仅提供标题，请打开来源原文。", size)
-                if config["ai_enabled"] and st.button("生成中文解读（计入 AI 配额）"):
-                    task = api("articles/" + identity + "/analyze", "POST")
-                    st.session_state["_analysis_requested"] = identity
-                    st.success("已加入分析队列。" if task["queued"] else "已有结果或正在处理中。")
-                if st.session_state.get("_analysis_requested") == identity:
-                    st.caption("分析受每天配额与月预算限制；额度不足时保留规则结果。")
-                    if st.button("刷新这篇文章"):
-                        st.rerun()
+                if config["ai_enabled"]:
+                    st.info("这篇文章还没有中文 AI 解读。下面先展示来源摘要，阅读原文无需等待分析。")
+                    prose(detail["summary"] or "来源仅提供标题，请打开来源原文。", size)
+                    if st.button("生成中文解读（计入 AI 配额）", key="reader-request-analysis"):
+                        task = api("articles/" + identity + "/analyze", "POST")
+                        st.session_state["_analysis_requested"] = identity
+                        st.success("已加入分析队列。" if task["queued"] else "已有结果或正在处理中。")
+                    if st.session_state.get("_analysis_requested") == identity:
+                        st.caption("分析受每天配额与月预算限制；额度不足时保留规则结果。")
+                        if st.button("刷新这篇文章", key="reader-refresh-analysis"):
+                            st.rerun()
+                else:
+                    st.info("当前为规则/来源模式：未启用 AI 解读，不提供生成入口。下面展示来源摘要。")
+                    prose(detail["summary"] or "来源仅提供标题，请打开来源原文。", size)
             st.download_button(
                 "保存阅读笔记",
                 f"# {detail['title']}\n\n{result.get('summary_zh') or detail['summary']}\n\nAI 潜在影响：{result.get('impact_analysis', '尚未分析')}\n\n来源：{detail['original_url']}\n\n未独立核验",
@@ -276,9 +337,12 @@ def render_reader(api, config: dict, names: dict, localtime) -> None:
             )
         with original:
             st.caption("这是订阅源提供的摘要；平台没有抓取或伪造未获授权的文章全文。")
-            prose(detail["summary"] or "来源仅提供标题。", size)
-            if detail.get("content"):
-                prose(detail["content"], size)
+            sections = source_sections(detail.get("summary"), detail.get("content"))
+            if not sections:
+                prose("来源仅提供标题。", size)
+            for title, text in sections:
+                st.markdown(f'<div class="reader-section">{title}</div>', unsafe_allow_html=True)
+                prose(text, size)
         with evidence:
             st.write("发现时间：", localtime(detail["collected_at"]))
             st.write("原始链接：", detail["original_url"])
@@ -294,6 +358,8 @@ def render_reader(api, config: dict, names: dict, localtime) -> None:
                     st.json(rules["analysis_json"].get("score_dimensions", {}))
             with st.expander("原始来源证据"):
                 st.json(detail.get("raw_payload"), expanded=False)
+        st.divider()
+        reader_navigation(ids, index, "bottom")
 
     if scroll_to_title:
         # Static application code only. Never interpolate external article text into executable HTML.
