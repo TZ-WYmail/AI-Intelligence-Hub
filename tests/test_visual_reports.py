@@ -1,3 +1,4 @@
+import html
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -10,7 +11,7 @@ from streamlit.testing.v1 import AppTest
 from app.models import Article, Digest, Industry, Source, now
 from app.services.analytics import mentioned_regions
 from dashboard.briefs import split_report
-from dashboard.visuals import globe_figure, trend_figure
+from dashboard.visuals import globe_figure, horizontal_count_figure, language_label, trend_figure
 
 
 def _visual_data(**overrides):
@@ -70,6 +71,29 @@ def test_region_matching_requires_text_and_handles_nested_names():
         "TW": "台湾",
     }
     assert dict(mentioned_regions("印度尼西亚开展合作")) == {"ID": "印度尼西亚"}
+
+
+def test_language_labels_map_common_codes_without_guessing_unknown():
+    assert language_label("zh") == "中文"
+    assert language_label("EN") == "英文"
+    assert language_label("zh-CN") == "中文"
+    assert language_label("unknown") == "未知"
+    assert language_label("xx-custom") == "xx-custom"
+    assert language_label("") == "未知"
+
+
+def test_same_prefix_long_names_keep_separate_bars_and_full_names_traceable():
+    first = "Shared<b>PrefixAlpha"
+    second = "Shared<b>PrefixBeta"
+    figure = horizontal_count_figure([first, second], [7, 3], ["#111111", "#222222"])
+    assert list(figure.data[0].y) == [0, 1]
+    assert list(figure.data[0].x) == [7, 3]
+    assert list(figure.layout.yaxis.tickvals) == [0, 1]
+    assert figure.layout.yaxis.ticktext[0] == figure.layout.yaxis.ticktext[1]
+    assert "&lt;b&gt;" in figure.layout.yaxis.ticktext[0]
+    assert list(figure.data[0].customdata[0]) == [html.escape(first)]
+    assert list(figure.data[0].customdata[1]) == [html.escape(second)]
+    assert "%{customdata[0]}" in figure.data[0].hovertemplate
 
 
 def test_analytics_time_window_multicategory_and_unmapped(news_client, db):

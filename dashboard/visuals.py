@@ -23,6 +23,109 @@ HEAT_SCALE = [[stop, color] for stop, color in HEAT_STOPS]
 HEAT_GRADIENT = (
     "linear-gradient(90deg, " + ", ".join(f"{color} {stop * 100:g}%" for stop, color in HEAT_STOPS) + ")"
 )
+LANGUAGE_LABELS = {
+    "zh": "中文",
+    "en": "英文",
+    "ja": "日文",
+    "ko": "韩文",
+    "fr": "法文",
+    "de": "德文",
+    "es": "西班牙文",
+    "ru": "俄文",
+    "pt": "葡萄牙文",
+    "it": "意大利文",
+    "ar": "阿拉伯文",
+    "nl": "荷兰文",
+    "hi": "印地文",
+    "tr": "土耳其文",
+    "unknown": "未知",
+}
+
+
+def short_label(name: str, limit: int = 16) -> str:
+    """Keep chart axes readable; the full name remains in hover and tables."""
+    text = str(name or "").strip()
+    if not text:
+        return "—"
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def language_label(code: str) -> str:
+    """Map common language codes only; unknown codes stay exactly as provided."""
+    raw = str(code or "").strip()
+    if not raw:
+        return "未知"
+    base = raw.replace("_", "-").split("-", 1)[0].lower()
+    return LANGUAGE_LABELS.get(base, raw)
+
+
+def integer_count_axis(figure: go.Figure, axis: str, values: list[int], title="文章数（篇）") -> None:
+    """Label count axes with units and keep small ranges on integer ticks."""
+    peak = max(values or [0])
+    update = figure.update_xaxes if axis == "x" else figure.update_yaxes
+    kwargs = {"title": title, "tickformat": "d", "rangemode": "tozero"}
+    if peak <= 10:
+        kwargs["dtick"] = 1
+    update(**kwargs)
+
+
+def category_summary_rows(data: dict) -> list[dict]:
+    """Pure-data rows for the accessible category summary; full names are retained."""
+    rows = []
+    industries = sorted(
+        (item for item in data["industries"] if item["count"] > 0),
+        key=lambda item: (-item["count"], item["name"]),
+    )
+    rows.extend({"分类": "行业", "名称": item["name"], "文章数（篇）": item["count"]} for item in industries)
+    sources = sorted(
+        (item for item in data["sources"] if item["count"] > 0),
+        key=lambda item: (-item["count"], item["name"]),
+    )
+    rows.extend({"分类": "来源", "名称": item["name"], "文章数（篇）": item["count"]} for item in sources)
+    languages = sorted(
+        (item for item in data["languages"] if item["count"] > 0),
+        key=lambda item: (-item["count"], language_label(item["name"]), item["name"]),
+    )
+    for item in languages:
+        code = str(item["name"] or "").strip()
+        label = language_label(code)
+        display = label if not code or label == code else f"{label}（{code}）"
+        rows.append({"分类": "语言", "名称": display, "文章数（篇）": item["count"]})
+    return rows
+
+
+def horizontal_count_figure(
+    names: list[str],
+    counts: list[int],
+    colors,
+    *,
+    height: int = 320,
+    show_text: bool = False,
+) -> go.Figure:
+    """Build a horizontal bar chart on unique numeric positions.
+
+    Short tick labels may collide; positions never do. Full names stay in
+    customdata for hover, escaped so Plotly cannot interpret markup in a name.
+    """
+    positions = list(range(len(names)))
+    ticktext = [html.escape(short_label(name)) for name in names]
+    customdata = [[html.escape(str(name))] for name in names]
+    trace = go.Bar(
+        y=positions,
+        x=counts,
+        orientation="h",
+        marker_color=colors,
+        customdata=customdata,
+        hovertemplate="%{customdata[0]} · %{x} 篇<extra></extra>",
+    )
+    if show_text:
+        trace.text = counts
+        trace.textposition = "outside"
+    figure = go.Figure(trace)
+    figure.update_layout(yaxis={"automargin": True})
+    figure.update_yaxes(tickvals=positions, ticktext=ticktext)
+    integer_count_axis(figure, "x", counts)
+    return style(figure, height)
 
 
 def xyz(lat, lon, radius=1):
@@ -199,7 +302,7 @@ def trend_figure(timeline: list[dict]) -> go.Figure:
     )
     # Labels already use the configured local timezone; never let Plotly infer an arbitrary year.
     figure.update_xaxes(type="category")
-    figure.update_yaxes(title="文章数", rangemode="tozero")
+    integer_count_axis(figure, "y", [item["count"] for item in timeline])
     return style(figure)
 
 
@@ -276,25 +379,22 @@ def render_visuals(api) -> None:
     with right:
         st.markdown("#### 行业关注度")
         if industries:
-            figure = go.Figure(
-                go.Bar(
-                    y=[v["name"] for v in industries],
-                    x=[v["count"] for v in industries],
-                    orientation="h",
-                    marker_color=[color_map[item["id"]] for item in industries],
-                    text=[v["count"] for v in industries],
-                    textposition="outside",
-                    hovertemplate="%{y} · %{x} 篇<extra></extra>",
-                )
+            counts = [item["count"] for item in industries]
+            figure = horizontal_count_figure(
+                [item["name"] for item in industries],
+                counts,
+                [color_map[item["id"]] for item in industries],
+                height=420,
+                show_text=True,
             )
-            figure.update_layout(xaxis_title="文章数", yaxis={"automargin": True})
-            figure.update_xaxes(range=[0, max(item["count"] for item in industries) * 1.2])
-            st.plotly_chart(
-                style(figure, 420), key="industry_chart", width="stretch", config={"displayModeBar": False}
-            )
+            figure.update_xaxes(range=[0, max(counts) * 1.2])
+            st.plotly_chart(figure, key="industry_chart", width="stretch", config={"displayModeBar": False})
         else:
             st.info("此时间范围尚无文章，采集后自动生成分析。")
-        st.caption("按文章分类统计；一篇文章可属于多个行业，行业数量合计可能大于文章总数。")
+        st.caption(
+            "按文章分类统计；一篇文章可属于多个行业，行业数量合计可能大于文章总数。"
+            "长名称在轴上使用短标签，悬停与下方汇总表保留完整名称。"
+        )
     if active and mode == "mentions":
         names = {region["id"]: f"{region['name']} · {region['mentions']}篇" for region in active}
         chosen = st.selectbox("查看地区对应报道", list(names), format_func=names.get, key="region_examples")
@@ -345,20 +445,21 @@ def render_visuals(api) -> None:
         st.plotly_chart(
             style(figure), key="importance_chart", width="stretch", config={"displayModeBar": False}
         )
-        st.caption("按系统评分阈值统计，不代表事实核实程度。")
+        st.caption("按系统评分阈值统计；评分只表示重要程度，不代表可信度或事实核实。")
     with st.expander("展开行业变化与来源构成", expanded=False):
         if industries:
             heat = go.Figure(
                 go.Heatmap(
                     x=[v["time"] for v in data["timeline"]],
-                    y=[v["name"] for v in industries],
+                    y=[html.escape(v["name"]) for v in industries],
                     z=[v["timeline"] for v in industries],
                     colorscale=[[0, "#132238"], [1, PALETTE[0]]],
                     hovertemplate="%{y}<br>%{x} · %{z} 篇<extra></extra>",
-                    colorbar={"title": "篇"},
+                    colorbar={"title": "篇", "tickformat": "d"},
                 )
             )
             heat.update_xaxes(type="category")
+            heat.update_yaxes(automargin=True)
             st.plotly_chart(
                 style(heat, 340), key="industry_heat_chart", width="stretch", config={"displayModeBar": False}
             )
@@ -366,30 +467,40 @@ def render_visuals(api) -> None:
         with source_col:
             st.markdown("#### 来源贡献 · 前8名")
             rows = list(reversed(data["sources"][:8]))
-            figure = go.Figure(
-                go.Bar(
-                    y=[v["name"] for v in rows],
-                    x=[v["count"] for v in rows],
-                    orientation="h",
-                    marker_color=PALETTE[1],
-                    hovertemplate="%{y} · %{x} 篇<extra></extra>",
-                )
+            figure = horizontal_count_figure(
+                [item["name"] for item in rows],
+                [item["count"] for item in rows],
+                PALETTE[1],
             )
-            figure.update_yaxes(automargin=True)
-            st.plotly_chart(
-                style(figure), key="source_chart", width="stretch", config={"displayModeBar": False}
-            )
+            st.plotly_chart(figure, key="source_chart", width="stretch", config={"displayModeBar": False})
+            st.caption("仅展示当前范围文章数最多的前 8 个来源；悬停与汇总表保留完整名称。")
         with language_col:
             st.markdown("#### 新闻语言")
             figure = go.Figure(
                 go.Pie(
-                    labels=[v["name"] for v in data["languages"]],
-                    values=[v["count"] for v in data["languages"]],
+                    labels=[html.escape(language_label(item["name"])) for item in data["languages"]],
+                    values=[item["count"] for item in data["languages"]],
                     hole=0.55,
                     marker_colors=PALETTE,
+                    hovertemplate="%{label}<br>%{value} 篇<extra></extra>",
                 )
             )
             st.plotly_chart(
                 style(figure), key="language_chart", width="stretch", config={"displayModeBar": False}
             )
+            st.caption("zh/en 等常见代码映射中文；未识别的代码原样保留。")
+    with st.expander("分类统计纯数据摘要", expanded=False):
+        st.caption(
+            "各分类内按文章数降序、同数按名称排序。行业按多标签分别计数，"
+            "同一篇文章可属于多个行业，行业合计可能大于文章总量。"
+        )
+        st.caption(
+            "来源图仅展示前 8 名，本表列出当前范围全部来源。重要性评分不在本表："
+            "评分只表示重要程度，不代表可信度或事实核验。"
+        )
+        st.table(
+            category_summary_rows(data),
+            hide_index=True,
+            alt="分类统计纯数据摘要：行业、来源、语言文章数；重要性评分不在表内，不能当作可信度。",
+        )
     st.caption("地球轮廓：Natural Earth · 本地公共领域底图，无需地图密钥。热区光晕仅为提及频次的可视化示意。")
