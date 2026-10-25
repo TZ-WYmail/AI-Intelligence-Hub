@@ -12,7 +12,7 @@ import theme
 st.set_page_config(page_title="AI Intelligence Hub", page_icon="◈", layout="wide")
 theme.apply_theme()
 
-key, page = sidebar.render_sidebar()
+key, page, status = sidebar.render_sidebar()
 base = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 # No key auto-filled or sent to browser. Enter explicitly per session.
 if not key:
@@ -42,6 +42,8 @@ class ApiError(RuntimeError):
 
 def api(path: str, method: str = "GET", body=None, params=None, *, soft: bool = False):
     def fail(message: str) -> None:
+        if path == "settings":
+            sidebar.clear_verified()
         if soft:
             raise ApiError(message)
         st.error(message)
@@ -80,6 +82,7 @@ if show_heading:
     st.title(page)
 
 config = api("settings")
+sidebar.mark_verified(status)
 tz = ZoneInfo(config["timezone"])
 
 

@@ -33,3 +33,33 @@ Codex 独立审查：独立运行侧栏/全页面/登录8项mock测试通过，R
 - 选中态、hover 和 44px 整行点击区仍需 Codex 在真实浏览器确认；本轮未做浏览器截图。
 - 品牌/间距为第一轮范围；凭据收纳、退出、窄屏折叠和键盘焦点留待后续三轮。
 - 未操作真实数据/容器/凭据，未 commit/push。
+
+## 第 2/4 轮：凭据收纳、会话状态与退出（Codex 已审查）
+
+Codex 独立审查：独立11项侧栏/页面/登录mock回归通过，Ruff通过；审查确认验证状态仅在settings成功后填充，失败清空，退出回调先清理凭据/阅读缓存后登录门停止请求，未删除数据。折叠状态留待浏览器核验。
+
+### 问题
+
+- 管理员密码一直显示在品牌下方主位置，登录后仍占据侧栏首屏。
+- 没有“本次连接已验证”的真实状态；非空密码容易被误解为已连接。
+- 缺少只清理本地会话的退出入口。
+
+### 改动
+
+- 导航仍优先：品牌 → 唯一 `工作空间` radio（原 8 个中文选项/顺序不变）→ 会话状态 → 原生 `会话与凭据` expander。
+- 密钥输入移入 expander，label 仍为“管理员密钥”，始终 password、默认空、autocomplete off；登录页 `ui.text_input[0]` 仍是密钥。expand 初始未登录展开，认证状态变化后收纳；只在 auth version 变化时设置展开值，不按每次 rerun 强制覆盖。
+- expander 内提供“退出当前会话”按钮：清空 `admin_key`、`_reader`、`_analysis_requested`、`_reading_preferences`、`_custom_brief` 和已验证标记；保留 `workspace_nav` 页面选择，不调用删除凭据/数据库/书签的接口。
+- 侧栏导航外预留 status 容器；仅在 `GET /api/v1/settings` 成功后填“本次连接已验证”。无密码、错误密码 401、更换密钥、网络失败均不显示；密钥变化及 settings 失败会清除旧验证状态。
+- 无新增 API/轮询/持久化密钥副本或 hash；退出后的同一 rerun 在登录门前停止业务请求。
+
+### 实际验证
+
+- `tests/test_sidebar.py` 新增/扩展：错误密码 401 无“已验证”；正确登录和切页后密钥保留；“已验证”出现；退出后密码为空、页面选择保留、reader/analysis/prefs/custom brief 清空、业务 API 调用为 0、显示登录页；再次登录成功。
+- 另测更换密钥后的 401 与网络失败都会清除旧“已验证”；未登录初始无“已验证”；原有 8 页选择与未登录零 API 断言保留。
+- 完整前端 mock 组：`30 passed, 1 warning in 8.38s`（警告为依赖的 Starlette/httpx 弃用提示）。Ruff：`All checks passed!`，`82 files already formatted`。
+
+### 局限
+
+- 原生 expander 的展开/收起可见状态需 Codex 在真实浏览器确认；代码只在认证版本变化时设置初始展开，用户手动展开的跨 rerun 持久性仍以实际组件行为为准。
+- 登录后主区存在搜索框时，AppTest 的元素顺序可能把搜索框列在密钥前；登录页/退出后 `ui.text_input[0]` 仍为密钥，登录后测试按 label 读取密钥。
+- 未操作真实数据/凭据/容器，未 commit/push。
