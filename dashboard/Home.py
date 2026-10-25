@@ -5,27 +5,16 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import httpx
+import sidebar
 import streamlit as st
 import theme
 
 st.set_page_config(page_title="AI Intelligence Hub", page_icon="◈", layout="wide")
 theme.apply_theme()
 
-st.sidebar.title("◈ AIH 情报中心")
-st.sidebar.caption("AI INTELLIGENCE HUB · 个人情报工作台")
-key = st.sidebar.text_input(
-    "管理员密钥",
-    type="password",
-    value="",
-    autocomplete="off",
-    placeholder="输入后按回车",
-)
+key, page = sidebar.render_sidebar()
 base = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 # No key auto-filled or sent to browser. Enter explicitly per session.
-page = st.sidebar.radio(
-    "工作空间", ["概览", "实时新闻", "重大事件", "行业管理", "数据源管理", "简报", "系统设置", "运行日志"]
-)
-st.sidebar.caption("所有 AI 分析均为辅助判断。未独立核实的信息标记为 unverified。")
 if not key:
     st.markdown(
         '<div class="aih-login-eyebrow">AI Intelligence Hub</div>',
