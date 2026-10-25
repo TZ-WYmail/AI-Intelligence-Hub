@@ -5,20 +5,20 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import streamlit as st
+import theme
 
 st.set_page_config(page_title="AI Intelligence Hub", page_icon="◈", layout="wide")
-st.markdown(
-    """<style>
-.stApp {background:#0c111b;color:#e7edf6} [data-testid=stSidebar]{background:#121b2a}
-h1,h2,h3{letter-spacing:-.025em} [data-testid=stMetric]{background:#152033;padding:18px;border:1px solid #28374d;border-radius:12px}
-.block-container{padding-top:2rem} a{color:#67dac3!important}
-</style>""",
-    unsafe_allow_html=True,
-)
+theme.apply_theme()
 
 st.sidebar.title("◈ AIH 情报中心")
 st.sidebar.caption("AI INTELLIGENCE HUB · 个人情报工作台")
-key = st.sidebar.text_input("管理员密钥", type="password", value="")
+key = st.sidebar.text_input(
+    "管理员密钥",
+    type="password",
+    value="",
+    autocomplete="off",
+    placeholder="输入后按回车",
+)
 base = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 # No key auto-filled or sent to browser. Enter explicitly per session.
 page = st.sidebar.radio(
@@ -26,8 +26,34 @@ page = st.sidebar.radio(
 )
 st.sidebar.caption("所有 AI 分析均为辅助判断。未独立核实的信息标记为 unverified。")
 if not key:
+    st.markdown(
+        '<div class="aih-login-eyebrow">AI Intelligence Hub</div>',
+        unsafe_allow_html=True,
+    )
     st.title("让分散的信息，成为可追踪的情报。")
-    st.info("在左侧输入 .env 中的 ADMIN_API_KEY，进入个人情报工作空间。")
+    st.markdown(
+        '<p class="aih-login-lede">把多行业实时监控、事件关联和每日简报放在同一条可追踪的流水线里。'
+        "进入前只需要本机管理员密钥。</p>",
+        unsafe_allow_html=True,
+    )
+    left, right = st.columns([1.6, 1], gap="large")
+    with left:
+        with st.container(border=True, key=theme.card_key("login")):
+            st.markdown("### 如何进入")
+            st.markdown(
+                "1. 在左侧「管理员密钥」输入本机 `.env` 文件中的 `ADMIN_API_KEY`。\n"
+                "2. 按回车或点击输入框外侧，页面会向本机 API 发起一次已鉴权请求。\n"
+                "3. 验证通过后进入左侧已选择的工作空间（默认「概览」），可继续切换。"
+            )
+            st.caption("窄屏请先点击左上角的侧栏按钮展开。")
+    with right:
+        with st.container(border=True, key=theme.card_key("login-notes")):
+            st.markdown("### 密钥边界")
+            st.markdown(
+                "- 输入框为密码类型，页面不回显密钥。\n"
+                "- 不自动填充，也不写入页面内容或文件。\n"
+                "- 仅在当前浏览器会话中用于请求本机 API。"
+            )
     st.stop()
 
 
@@ -118,7 +144,7 @@ if page == "概览":
         with left:
             st.subheader("最新情报")
             for item in api("articles", params={"limit": 8})["items"]:
-                with st.container(border=True):
+                with st.container(border=True, key=theme.card_key("overview-" + item["id"])):
                     st.caption(
                         f"{localtime(item['published_at'])} · {item['importance_score']} 分 · {', '.join(industry_names.get(i, i) for i in item['industry_ids'])}"
                     )
