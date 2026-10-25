@@ -6,6 +6,10 @@
 
 > 这不是生产 SLA，也不是真实第三方稳定性验证；不证明 24 小时真实运行。
 > 短程完成只证明代码路径与断言，不能替代 Codex 审查后启动的长程观察。
+>
+> **第五段 24 小时观察进行中，尚未验收**。中期快照与最终验收清单见
+> [`SOAK_ACCEPTANCE.md`](SOAK_ACCEPTANCE.md)；在 `summary.json` 出现并逐项满足
+> 断言前，不得称为 24 小时通过。
 
 ## 不做什么
 
@@ -176,16 +180,93 @@ sqlite3 'file:data/soak/<run_id>/soak.db?mode=ro' \
 预计故障写在 `expected_failures`，意外错误写在 `unexpected_errors`；两者不会
 混在一起，也不会因为“是故障演练”就忽略失败。
 
-## 检查点过期/异常退出
+## 检查点过期/异常退出（容器与原生区分）
 
-工具本身没有 watchdog。Codex 定时检查时：
+工具本身没有 watchdog。`checkpoint.json` 只说明进程在某一批结束时自报的状态，
+**`summary.json` 才是最终结论**。判断“是否还活着/是否异常”时，先区分运行方式。
 
-- 若 `checkpoint.json` 的 `status=running`，但 `updated_at` 明显超过
-  `2 × interval`，或 `kill -0 <pid>` 失败，按异常退出报告；
+### 容器内运行（当前第五段方式）
+
+`checkpoint.json` 的 `pid` 是**容器 PID 命名空间内**的 PID，不能拿它到宿主或
+其他命名空间执行 `kill -0`。本编排 shell 自身可能还在独立的 bwrap PID
+命名空间里，连 `docker inspect` 给出的宿主 init PID 也可能不可见；因此：
+
+- **禁止**用 `kill -0 <checkpoint.pid>` 的失败来判定容器内 soak 死亡；
+- 一律用**精确容器身份**（完整 container ID 或精确 name，不用可能有歧义的前缀）
+  的 Docker 状态，再结合检查点归属与新鲜度判断；
+- `docker inspect` 只读，不会创建、启动或停止观察实例。
+
+适用于当前目录的只读示例（容器名必须与当前 run 精确一致）：
+
+```bash
+docker inspect --format 'name={{.Name}} id={{.Id}} image={{.Image}} running={{.State.Running}} paused={{.State.Paused}} exit={{.State.ExitCode}} restarts={{.RestartCount}} oom={{.State.OOMKilled}} started={{.State.StartedAt}} args={{json .Config.Cmd}}' \
+  aih-soak-429779a-6dd86de1
+```
+
+示例中的名称/run 目录只对应本次第五段实例；不要为了套用示例而启动新容器或新
+run。下面所有检查都只读，不产生新的观察实例。
+
+判读规则：
+
+- `Running=false` 且 `Paused=false`：进程已退出；`ExitCode` 是退出证据，随后必须
+  以 `summary.json` 为准。`ExitCode != 0` 按异常退出；`ExitCode=0` 但缺少
+  `summary.json` 仍不能算完成。
+- `Paused=true`：进程被暂停；暂停时间和恢复后的补跑都不能算作连续观察。
+- 顶层 `RestartCount > 0`：容器发生过重启，不能当作“同一容器连续运行”，按异常处理。
+- `OOMKilled=true`：按异常退出处理，并保留 Docker/内核证据。
+- `Running=true` 只证明容器还在，不证明批处理仍在推进；必须继续核对检查点。
+
+再只读核对检查点是否属于该 run、以及是否超过 `2 × interval` 未更新（当前 60 秒
+interval 即 120 秒）：
+
+```bash
+RUN_ID=container-24h-429779a-6dd86de1
+python3 - "$RUN_ID" <<'PY'
+import json
+import sys
+from datetime import datetime, timezone
+
+run_id = sys.argv[1]
+path = f"data/soak/{run_id}/checkpoint.json"
+c = json.load(open(path, encoding="utf-8"))
+updated = datetime.fromisoformat(c["updated_at"])
+age = (datetime.now(timezone.utc) - updated).total_seconds()
+print("run_id_match=", c["run_id"] == run_id)
+print("status=", c["status"], "batches=", c["batches"])
+print("updated_at=", c["updated_at"], "age_seconds=", round(age, 1))
+print("stale_over_2x_interval=", age > 2 * c["interval_seconds"])
+PY
+```
+
+- `run_id_match=False`：目录/检查点归属不符，不要继续推断，先核对容器
+  `.Config.Cmd` 里的 `--run-dir`。
+- `stale_over_2x_interval=True` 且容器仍 `Running=true`：按“疑似停滞”报告，
+  保留容器、目录和日志；不要用 `docker stop/restart`、`touch stop` 或重新
+  `docker run` 来“修复”现场。
+- 容器已退出时，检查点可能仍停在最后一份 `status=running`；这是旧快照，
+  不能覆盖 `summary.json` 的结论。
+
+### 原生非容器运行
+
+只有检查进程与 soak 进程处于**同一 PID 命名空间**（原生直接运行，没有
+容器/bwrap/其他 PID namespace 隔离）时，才可以用检查点 PID 做存在性探测：
+
+```bash
+# 仅限原生、同一 PID 命名空间；容器方式不要执行
+kill -0 <checkpoint.json 中的 pid>
+```
+
+即使在同一命名空间，`kill -0` 也只证明 PID 存在，不证明批处理推进；仍须结合
+`updated_at`、`soak.log` 和最终的 `summary.json`。
+
+### 共同规则
+
 - 查看 `soak.log` 最后事件与 `summary.json` 是否存在；只有 summary 才是最终
-  结论，不能用最后一份 running 检查点声称完成；
-- 不要删除、覆盖或复用该目录；保留现场，报告 `run_id`、PID、最后
-  `updated_at`、`batches`、backlog 和短错误码。
+  结论，不能用最后一份 running 检查点声称完成。
+- 不要删除、覆盖或复用该目录；保留现场，报告 `run_id`、容器 name/ID、
+  `State.Running/Paused/ExitCode/OOMKilled`、顶层 `RestartCount`、PID 的作用域、
+  最后 `updated_at`、`batches`、backlog 和短错误码。
+- 检查点异常与“24 小时未到”是两件事：未到时长只能继续等待，不能提前判通过。
 
 ## 测试
 
