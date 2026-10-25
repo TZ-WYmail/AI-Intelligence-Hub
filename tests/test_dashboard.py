@@ -405,3 +405,32 @@ def test_source_list_filter_is_display_only_and_edit_options_stay_complete(db):
         assert after == before
     finally:
         app.dependency_overrides.clear()
+
+
+def test_overview_empty_state_uses_one_prompt_and_small_hints(db):
+    app.dependency_overrides[get_session] = lambda: db
+    try:
+        with TestClient(app) as client:
+
+            def request(method, url, **kwargs):
+                parsed = urlsplit(url)
+                return client.request(
+                    method,
+                    parsed.path,
+                    headers=kwargs.get("headers"),
+                    json=kwargs.get("json"),
+                    params=kwargs.get("params"),
+                )
+
+            with patch("httpx.request", request):
+                ui = AppTest.from_file(str(Path("dashboard/Home.py").resolve()), default_timeout=20).run()
+                ui.text_input[0].input("test-admin").run()
+                assert not ui.exception
+
+        assert len(ui.info) == 1
+        assert "最近 24 小时没有新文章" in ui.info[0].value
+        captions = "\n".join(item.value for item in ui.caption)
+        assert "没有可定位的地区依据" in captions
+        assert "行业分类" in captions
+    finally:
+        app.dependency_overrides.clear()

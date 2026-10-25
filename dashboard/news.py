@@ -17,14 +17,14 @@ STYLES = """<style>
 .news-badge-state {color:var(--aih-accent);border-color:rgba(98,223,199,.35);background:rgba(98,223,199,.10)}
 .news-badge-score {color:var(--aih-text);background:var(--aih-panel)}
 .news-badge-unverified {color:#ffc575;border-color:rgba(255,197,117,.35);background:rgba(255,197,117,.08)}
-.news-title {font-size:1.23rem;font-weight:600;line-height:1.5;margin:0 0 .25rem;overflow-wrap:anywhere;word-break:break-word;color:var(--aih-text-strong)}
+h3.news-title {font-size:1.23rem;font-weight:600;line-height:1.5;margin:0 0 .25rem;overflow-wrap:anywhere;word-break:break-word;color:var(--aih-text-strong)}
 .news-industries {display:flex;flex-wrap:wrap;gap:.35rem;margin:.1rem 0 .2rem}
 .news-industry {max-width:100%;padding:.08rem .48rem;border:1px solid var(--aih-border);border-radius:999px;background:var(--aih-surface);color:var(--aih-muted);font-size:.74rem;line-height:1.55;overflow-wrap:anywhere}
 .news-summary-label {margin:.75rem 0 .15rem;font-size:.74rem;font-weight:600;letter-spacing:.02em;color:var(--aih-accent)}
 .news-summary-label.source {color:var(--aih-muted)}
 .news-excerpt {font-size:.96rem;line-height:1.8;color:var(--aih-text);overflow-wrap:anywhere;white-space:pre-wrap}
 .reader-kicker {margin:0 0 .35rem;color:var(--aih-accent);font-size:.76rem;font-weight:600;letter-spacing:.05em;overflow-wrap:anywhere}
-.reader-title {font-size:clamp(1.6rem,3vw,2.3rem);font-weight:650;line-height:1.35;margin:0 0 .45rem;color:var(--aih-text-strong);overflow-wrap:anywhere;word-break:break-word}
+h1.reader-title {font-size:clamp(1.6rem,3vw,2.3rem);font-weight:650;line-height:1.35;margin:0 0 .45rem;color:var(--aih-text-strong);overflow-wrap:anywhere;word-break:break-word}
 .reader-meta {display:flex;flex-wrap:wrap;gap:.2rem .6rem;margin:.2rem 0 .45rem;color:var(--aih-muted);font-size:.82rem;line-height:1.6}
 .reader-meta .reader-mode {color:var(--aih-text);font-weight:600}
 .reading-prose {line-height:1.9;color:var(--aih-text);white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 1.05rem}
@@ -138,7 +138,7 @@ def news_card_html(item: dict, names: dict, industries: dict, localtime, *, comp
         f'<span class="news-badge news-badge-score" title="仅表示重要程度，不代表可信度">重要性 {score}</span>',
         '<span class="news-badge news-badge-unverified">未核验</span>',
         "</div>",
-        f'<div class="news-title">{html.escape(str(item.get("title") or ""))}</div>',
+        f'<h3 class="news-title">{html.escape(str(item.get("title") or ""))}</h3>',
     ]
     if industry_html:
         parts.append(f'<div class="news-industries">{industry_html}</div>')
@@ -261,7 +261,7 @@ def render_reader(api, config: dict, names: dict, localtime) -> None:
             f'<div class="reader-kicker">来源：{html.escape(source)}</div>',
             unsafe_allow_html=True,
         )
-        st.markdown(f'<div class="reader-title">{html.escape(detail["title"])}</div>', unsafe_allow_html=True)
+        st.markdown(f'<h1 class="reader-title">{html.escape(detail["title"])}</h1>', unsafe_allow_html=True)
         st.markdown(
             f'<div class="reader-meta"><span class="reader-mode">{html.escape(mode_label)}</span>'
             f"<span>发布 {html.escape(localtime(detail['published_at']))}</span>"
@@ -306,7 +306,7 @@ def render_reader(api, config: dict, names: dict, localtime) -> None:
                     prose(result["impact_analysis"], size)
                 if result.get("reasoning_summary"):
                     with st.expander("查看分析依据"):
-                        st.write(result["reasoning_summary"])
+                        prose(result["reasoning_summary"], size)
                 st.markdown('<div class="reader-section">AI 生成信息</div>', unsafe_allow_html=True)
                 st.caption(
                     f"模型：{ai['model']} · 生成时间：{localtime(ai['created_at'])}"

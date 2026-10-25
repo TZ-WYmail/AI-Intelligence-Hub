@@ -331,3 +331,30 @@ Codex 独立审查：页面相关 5 项独立 mock 回归通过，连续失败�
 
 - “当前有错误记录”按最近保留的错误信息计数；完整表另列“连续失败次数”（成功采集后归零），两者语义不同。
 - 来源总数包含已归档来源，编辑下拉保持原有完整列表；未在真实浏览器核对宽表横向滚动。
+
+---
+
+## 第 10 轮：UI 收尾（Codex 已审查）
+
+Codex 独立审查：Codex 独立完整套件 165 项通过（19.23 秒），Ruff 与格式检查通过（79 文件），新增主题配置仅包含界面主题和工具栏显示项。源码审查及凭据检查通过；桌面与390px真实视觉核验将在本提交部署后完成。
+
+### 真实视口问题与改动
+
+- 日期/刷新栏由 `[6,1]` 改为 `[3,1]`，给“刷新数据”留足宽度并保持原标签；四个指标用 `aih-overview-metrics` 自有 key，窄屏在该作用域内用 `display:grid` + `repeat(2,minmax(0,1fr))` + `gap` 做 2x2，`stColumn` 宽 100%、min-width 0、max-width none。没有全局 `horizontalBlock` 或 `:has` 规则。
+- caption 子 `p`/`span` 强制使用主题弱化色；字号提到 0.84rem（侧栏 0.78rem）。按钮统一最小高度 44px，补充 disabled 弱化态，保留青绿 focus-visible 轮廓。
+- 新增 `.streamlit/config.toml`：dark base、青绿 primaryColor、深色背景/面板/正文色；`[client] toolbarMode="minimal"` 去掉 Deploy 入口。文件不含凭据，未改安全项。
+- 无数据时保留真实 0 指标和一处主提示：地球与行业改为小 caption，删除重复蓝色 info，推低页面的问题收敛；统计范围未自动改。
+- 登录页去掉大块“密钥边界”和“已鉴权请求”技术文案，保留单个入口卡片、空密码输入、autocomplete off、ADMIN_API_KEY 来源说明和“已选择工作空间（默认概览）”语义；未登录不请求 API 的测试保留。
+- 简报页把归档选择与下载放同一行，生成说明/按钮并排；分页按钮列加宽（1.2/1/1.2），顶部页码输入与底部翻页保留，分页/下载/生成行为未改。
+- 阅读器标题改为语义 `h1`，新闻卡片标题改为 `h3` 并用 `h1.reader-title`/`h3.news-title` 作用域避免被全局标题放大；Home 新闻标题、事件摘要、时间线标题、地区样本标题、AI 分析依据改用 `html.escape` 的 HTML 块或现有 `prose`，不再走 `st.write` 的 Markdown 图片路径；显式原文链接保留。
+
+### 实际验证
+
+- `tests/test_dashboard.py tests/test_theme.py tests/test_news_reading.py tests/test_reader_workspace.py tests/test_news_filters.py tests/test_visual_reports.py` → `26 passed, 1 warning in 7.08s`（警告为依赖的 Starlette/httpx 弃用提示）。
+- 新增空状态行为用例：概览仅 1 条主 info，地球/行业提示为 caption；登录文案断言调整但空密码、autocomplete、无 API 调用行为断言保留；Globe 空提示断言改查 caption。
+- Ruff `check` 与 `format --check` 通过，`79 files already formatted`。
+
+### 待复核
+
+- 2x2 指标网格、[3,1] 刷新栏、caption/disabled/44px 点击区和语义标题需 Codex 在约 987×1024、390×844 真实浏览器与截图中确认；本轮未自行宣称十轮最终验收完成。
+- 未在真实浏览器运行，未操作容器/用户数据/凭据，未 commit/push。

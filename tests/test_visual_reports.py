@@ -141,7 +141,7 @@ def test_globe_works_with_no_regions_and_preserves_camera_revision():
 def test_globe_without_evidence_explains_gap_and_keeps_unknown_out_of_map_data():
     ui = _run_visuals(_visual_data())
     assert not ui.exception
-    assert any("没有可定位的地区依据" in item.value for item in ui.info)
+    assert any("没有可定位的地区依据" in item.value for item in ui.caption)
     table = ui.table[0].value
     assert table["地区"].tolist() == ["地区未知（未定位）"]
     assert table["当前依据文章数"].tolist() == [3]

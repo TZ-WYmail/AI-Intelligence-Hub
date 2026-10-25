@@ -125,7 +125,7 @@ def pager(
     include_page_input: bool,
 ) -> None:
     suffix = "" if location == "top" else "_bottom"
-    a, b, c = st.columns([1, 2, 1], vertical_alignment="bottom")
+    a, b, c = st.columns([1.2, 1, 1.2], vertical_alignment="bottom")
     a.button(
         "← 上一页",
         key=f"{namespace}{suffix}_previous",
@@ -205,16 +205,25 @@ def paged_report(markdown: str, identity: str, namespace: str, report: dict | No
 
 
 def render_briefs(api, tz) -> None:
-    st.caption("每日简报自动归档，分页阅读；复用已有分析，不额外调用模型或发送消息。")
-    if st.button("生成昨日日报"):
+    intro_col, action_col = st.columns([3, 1.4], vertical_alignment="center")
+    intro_col.caption("每日简报自动归档，分页阅读；复用已有分析，不额外调用模型或发送消息。")
+    if action_col.button("生成昨日日报", width="stretch"):
         result = api("reports/daily", "POST")
         st.success("报告已归档，请在下方查看。" if result.get("report_id") else "已加入队列，稍后刷新查看。")
     archives = api("reports")
     if archives:
         titles = {item["id"]: item["title"] for item in archives}
-        chosen = st.selectbox("已归档简报", list(titles), format_func=titles.get)
+        select_col, download_col = st.columns([1.5, 1], vertical_alignment="bottom")
+        chosen = select_col.selectbox("已归档简报", list(titles), format_func=titles.get)
         report = api("reports/" + chosen)
-        st.download_button("下载完整每日简报", report["markdown"], "aih-daily.md", mime="text/markdown")
+        with download_col:
+            st.download_button(
+                "下载完整每日简报",
+                report["markdown"],
+                "aih-daily.md",
+                mime="text/markdown",
+                width="stretch",
+            )
         paged_report(report["markdown"], chosen, "daily_brief", report=report, tz=tz)
     else:
         st.info("尚无归档简报。每天按设定时间生成，也可手动生成昨日报告。")

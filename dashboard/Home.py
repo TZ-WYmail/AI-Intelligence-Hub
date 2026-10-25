@@ -1,3 +1,4 @@
+import html
 import json
 import os
 from datetime import datetime, timedelta
@@ -36,24 +37,13 @@ if not key:
         "进入前只需要本机管理员密钥。</p>",
         unsafe_allow_html=True,
     )
-    left, right = st.columns([1.6, 1], gap="large")
-    with left:
-        with st.container(border=True, key=theme.card_key("login")):
-            st.markdown("### 如何进入")
-            st.markdown(
-                "1. 在左侧「管理员密钥」输入本机 `.env` 文件中的 `ADMIN_API_KEY`。\n"
-                "2. 按回车或点击输入框外侧，页面会向本机 API 发起一次已鉴权请求。\n"
-                "3. 验证通过后进入左侧已选择的工作空间（默认「概览」），可继续切换。"
-            )
-            st.caption("窄屏请先点击左上角的侧栏按钮展开。")
-    with right:
-        with st.container(border=True, key=theme.card_key("login-notes")):
-            st.markdown("### 密钥边界")
-            st.markdown(
-                "- 输入框为密码类型，页面不回显密钥。\n"
-                "- 不自动填充，也不写入页面内容或文件。\n"
-                "- 仅在当前浏览器会话中用于请求本机 API。"
-            )
+    with st.container(border=True, key=theme.card_key("login")):
+        st.markdown("### 如何进入")
+        st.markdown(
+            "1. 在左侧「管理员密钥」输入本机 `.env` 文件中的 `ADMIN_API_KEY`。\n"
+            "2. 按回车后进入左侧已选择的工作空间（默认「概览」）。"
+        )
+        st.caption("密钥只在当前会话用于本机 API 请求；未输入时不会加载业务数据。窄屏请先展开左侧栏。")
     st.stop()
 
 
@@ -139,6 +129,14 @@ def heartbeat_line(value):
     if status in {"暂无记录", "时间不可解析", "时间缺少时区"}:
         return status
     return f"{localtime(value)} · {status}"
+
+
+def escaped_block(text, class_name: str = "aih-external-text", tag: str = "div") -> None:
+    """Render external text as an escaped HTML block, never as Markdown."""
+    st.markdown(
+        f'<{tag} class="{class_name}">{html.escape(str(text or ""))}</{tag}>',
+        unsafe_allow_html=True,
+    )
 
 
 SOURCE_STATUS_LABELS = {
@@ -260,7 +258,7 @@ def source_diagnostic_rows(sources: list[dict], industry_names: dict, localtime)
 
 
 if show_heading:
-    context_col, refresh_col = st.columns([6, 1], vertical_alignment="center")
+    context_col, refresh_col = st.columns([3, 1], vertical_alignment="center")
     context_col.caption(
         f"多行业实时监控 / {datetime.now(tz).strftime('%Y年%m月%d日')} / {config['timezone']}"
     )
@@ -274,14 +272,15 @@ if page == "概览":
     @st.fragment(run_every="20s")
     def overview_metrics():
         stats = api("stats/overview")
-        columns = st.columns(4)
-        for col, label, field in zip(
-            columns,
-            ["24h 采集文章", "24h 新事件", "24h 重大事件", "启用数据源"],
-            ["articles_24h", "events_24h", "critical_24h", "active_sources"],
-            strict=False,
-        ):
-            col.metric(label, stats[field])
+        with st.container(key="aih-overview-metrics"):
+            columns = st.columns(4)
+            for col, label, field in zip(
+                columns,
+                ["24h 采集文章", "24h 新事件", "24h 重大事件", "启用数据源"],
+                ["articles_24h", "events_24h", "critical_24h", "active_sources"],
+                strict=False,
+            ):
+                col.metric(label, stats[field])
         st.caption(
             "指标统计最近 24 小时；下方列表与心跳是库中最新记录，不代表发生在 24 小时内或当前正在运行。"
         )
@@ -309,7 +308,7 @@ if page == "概览":
                     st.caption(
                         f"{localtime(item['published_at'])} · {item['importance_score']} 分 · {', '.join(industry_names.get(i, i) for i in item['industry_ids'])}"
                     )
-                    st.write(item["title"])
+                    escaped_block(item["title"], "aih-news-title", "h3")
                     st.link_button("阅读原文 ↗", item["original_url"])
         with right:
             st.subheader("运行脉搏")
@@ -341,7 +340,7 @@ elif page == "重大事件":
             f"{event['importance_score']}分 · {event.get('article_count', 1)}篇报道 · {event['title']}"
         ):
             detail = api("events/" + event["id"])
-            st.write(event["summary"])
+            escaped_block(event["summary"])
             st.caption(
                 f"验证状态：{event['verification_status']} · 首次发现 {localtime(event['first_seen_at'])}"
                 f" · 最近更新 {localtime(event['last_updated_at'])}"
@@ -356,7 +355,7 @@ elif page == "重大事件":
                 st.caption(
                     f"{localtime(article['published_at'])} · {article.get('source_name', '')} · {label}"
                 )
-                st.write(article["title"])
+                escaped_block(article["title"])
                 if article.get("publication_time_inferred"):
                     st.caption("来源未提供发布时间，以上时间为发现时间。")
                 st.link_button("阅读来源原文", article["original_url"], key=article["id"])

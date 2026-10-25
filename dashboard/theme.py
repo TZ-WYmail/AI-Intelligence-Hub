@@ -93,16 +93,33 @@ _CSS = Template(
   letter-spacing: -0.01em;
   margin: 1.35rem 0 0.45rem;
 }
+h3.aih-news-title {
+  color: var(--aih-text-strong);
+  font-size: 1.05rem;
+  line-height: 1.5;
+  margin: 0 0 0.3rem;
+  overflow-wrap: anywhere;
+}
+.aih-external-text {
+  color: var(--aih-text);
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 [data-testid="stMarkdown"] p {
   line-height: 1.75;
 }
 [data-testid="stCaptionContainer"] {
   color: var(--aih-muted);
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   line-height: 1.6;
 }
 [data-testid="stCaptionContainer"] p {
   margin-bottom: 0;
+}
+[data-testid="stCaptionContainer"] p,
+[data-testid="stCaptionContainer"] span {
+  color: var(--aih-muted) !important;
 }
 [data-testid="stMarkdown"] a,
 [data-testid="stMarkdownContainer"] a {
@@ -134,7 +151,7 @@ _CSS = Template(
 }
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
   color: var(--aih-muted);
-  font-size: 0.74rem;
+  font-size: 0.78rem;
   line-height: 1.55;
 }
 
@@ -179,13 +196,24 @@ _CSS = Template(
 
 /* Buttons, links and visible keyboard focus ------------------------------ */
 [data-testid="stButton"] button,
-[data-testid="stDownloadButton"] button {
+[data-testid="stDownloadButton"] button,
+[data-testid="stFormSubmitButton"] button {
   background: var(--aih-surface);
   border: 1px solid var(--aih-border);
   border-radius: var(--aih-radius-sm);
   color: var(--aih-text);
   font-weight: 600;
+  min-height: 2.75rem;
   transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+[data-testid="stButton"] button:disabled,
+[data-testid="stDownloadButton"] button:disabled,
+[data-testid="stFormSubmitButton"] button:disabled {
+  background: var(--aih-panel) !important;
+  border-color: var(--aih-border-soft) !important;
+  color: var(--aih-muted) !important;
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 [data-testid="stButton"] button:hover,
 [data-testid="stDownloadButton"] button:hover {
@@ -197,6 +225,9 @@ _CSS = Template(
   color: var(--aih-accent) !important;
   border-radius: var(--aih-radius-sm);
   font-weight: 600;
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
 }
 [data-testid="stButton"] button:focus-visible,
 [data-testid="stDownloadButton"] button:focus-visible,
@@ -259,6 +290,20 @@ _CSS = Template(
   }
   .aih-login-lede {
     font-size: 0.95rem;
+  }
+  [data-testid="stCaptionContainer"] {
+    font-size: 0.84rem;
+  }
+  [class*="st-key-aih-overview-metrics"] [data-testid="stHorizontalBlock"] {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.6rem !important;
+  }
+  [class*="st-key-aih-overview-metrics"] [data-testid="stColumn"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    flex: none !important;
   }
 }
 </style>

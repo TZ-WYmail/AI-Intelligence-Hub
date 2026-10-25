@@ -24,9 +24,10 @@ def test_login_explains_entry_without_prefilled_key_or_api_calls():
     assert not any(title.value == "概览" for title in ui.title)
 
     text = "\n".join(item.value for item in ui.markdown)
+    text += "\n" + "\n".join(item.value for item in ui.caption)
     assert "如何进入" in text
     assert "ADMIN_API_KEY" in text
-    assert "密码类型" in text
+    assert "未输入时不会加载业务数据" in text
     assert "进入左侧已选择的工作空间（默认「概览」）" in text
     assert "aih-login-lede" in text
     assert "test-admin" not in text

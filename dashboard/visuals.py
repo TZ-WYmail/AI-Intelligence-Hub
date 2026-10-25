@@ -347,7 +347,7 @@ def render_visuals(api) -> None:
                 reason = "当前范围内的文章没有可定位的地区依据。"
             else:
                 reason = "当前依据下没有可定位的地区。"
-            st.info(f"{reason}地图不会生成热区，地区未知的报道也不会标注在地图上。")
+            st.caption(f"{reason}地图不会生成热区，地区未知的报道也不会标注在地图上。")
         st.plotly_chart(
             globe_figure(data["regions"], mode, str(st.session_state.get("_globe_revision", 0)) + mode),
             key="globe_chart",
@@ -390,7 +390,7 @@ def render_visuals(api) -> None:
             figure.update_xaxes(range=[0, max(counts) * 1.2])
             st.plotly_chart(figure, key="industry_chart", width="stretch", config={"displayModeBar": False})
         else:
-            st.info("此时间范围尚无文章，采集后自动生成分析。")
+            st.caption("当前范围暂无行业分类数据；采集后自动生成。")
         st.caption(
             "按文章分类统计；一篇文章可属于多个行业，行业数量合计可能大于文章总数。"
             "长名称在轴上使用短标签，悬停与下方汇总表保留完整名称。"
@@ -401,7 +401,10 @@ def render_visuals(api) -> None:
         region = next(region for region in active if region["id"] == chosen)
         with st.expander("查看匹配依据与最近报道", expanded=False):
             for sample in region["samples"]:
-                st.write(sample["title"])
+                st.markdown(
+                    f'<div class="aih-external-text">{html.escape(str(sample["title"] or ""))}</div>',
+                    unsafe_allow_html=True,
+                )
                 st.caption(f"{sample['source']} · 文本命中“{sample['matched_term']}”")
                 st.link_button("阅读来源", sample["url"], key="region_" + sample["article_id"])
     if not data["total_articles"]:
