@@ -347,10 +347,11 @@ Codex 独立审查：Codex 独立完整套件 165 项通过（19.23 秒），Ruf
 - 登录页去掉大块“密钥边界”和“已鉴权请求”技术文案，保留单个入口卡片、空密码输入、autocomplete off、ADMIN_API_KEY 来源说明和“已选择工作空间（默认概览）”语义；未登录不请求 API 的测试保留。
 - 简报页把归档选择与下载放同一行，生成说明/按钮并排；分页按钮列加宽（1.2/1/1.2），顶部页码输入与底部翻页保留，分页/下载/生成行为未改。
 - 阅读器标题改为语义 `h1`，新闻卡片标题改为 `h3` 并用 `h1.reader-title`/`h3.news-title` 作用域避免被全局标题放大；Home 新闻标题、事件摘要、时间线标题、地区样本标题、AI 分析依据改用 `html.escape` 的 HTML 块或现有 `prose`，不再走 `st.write` 的 Markdown 图片路径；显式原文链接保留。
+- 浏览器复核修正：共享主题为 Markdown `h4/h5/h6` 定义递减字号/行高/边距（1.02/0.94/0.88rem），作用域限定 `stMarkdown`/`stHeading`；行业关注度与简报卡片 H4 不再大于 H3，`.news-title`/`.reader-title` 自有样式和图表内部标题不受影响。
 
 ### 实际验证
 
-- `tests/test_dashboard.py tests/test_theme.py tests/test_news_reading.py tests/test_reader_workspace.py tests/test_news_filters.py tests/test_visual_reports.py` → `26 passed, 1 warning in 7.08s`（警告为依赖的 Starlette/httpx 弃用提示）。
+- `tests/test_dashboard.py tests/test_theme.py tests/test_news_reading.py tests/test_reader_workspace.py tests/test_news_filters.py tests/test_visual_reports.py` → `26 passed, 1 warning in 7.58s`（警告为依赖的 Starlette/httpx 弃用提示）。
 - 新增空状态行为用例：概览仅 1 条主 info，地球/行业提示为 caption；登录文案断言调整但空密码、autocomplete、无 API 调用行为断言保留；Globe 空提示断言改查 caption。
 - Ruff `check` 与 `format --check` 通过，`79 files already formatted`。
 

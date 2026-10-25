@@ -93,6 +93,28 @@ _CSS = Template(
   letter-spacing: -0.01em;
   margin: 1.35rem 0 0.45rem;
 }
+.stApp [data-testid="stMarkdown"] h4,
+.stApp [data-testid="stHeading"] h4 {
+  color: var(--aih-text-strong);
+  font-size: 1.02rem;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  margin: 0.9rem 0 0.35rem;
+}
+.stApp [data-testid="stMarkdown"] h5,
+.stApp [data-testid="stHeading"] h5 {
+  color: var(--aih-text-strong);
+  font-size: 0.94rem;
+  line-height: 1.5;
+  margin: 0.8rem 0 0.3rem;
+}
+.stApp [data-testid="stMarkdown"] h6,
+.stApp [data-testid="stHeading"] h6 {
+  color: var(--aih-text-strong);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  margin: 0.7rem 0 0.25rem;
+}
 h3.aih-news-title {
   color: var(--aih-text-strong);
   font-size: 1.05rem;
