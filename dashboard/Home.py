@@ -141,6 +141,124 @@ def heartbeat_line(value):
     return f"{localtime(value)} · {status}"
 
 
+SOURCE_STATUS_LABELS = {
+    "healthy": "上次请求成功",
+    "backoff": "上次请求失败",
+    "error": "上次请求失败",
+    "idle": "尚未采集",
+    "unverified": "尚未采集",
+    "deleted": "已归档",
+}
+SOURCE_FILTER_VALUES = ["all", "enabled", "disabled", "errors"]
+SOURCE_FILTER_LABELS = {
+    "all": "全部",
+    "enabled": "已启用",
+    "disabled": "未启用",
+    "errors": "当前有错误记录",
+}
+
+
+def source_status_label(status) -> str:
+    raw = str(status or "").strip()
+    return SOURCE_STATUS_LABELS.get(raw, raw or "未知")
+
+
+def source_enabled_label(enabled) -> str:
+    return "已启用" if enabled else "未启用"
+
+
+def source_freshness_label(value) -> str:
+    raw = str(value or "").strip()
+    return {
+        "recent": "7天内",
+        "older_than_7_days": "超过7天",
+        "unknown": "日期未知",
+        "no_articles": "尚无文章",
+    }.get(raw, raw or "未知")
+
+
+def source_success_rate(source: dict):
+    checked = source.get("checked_count") or 0
+    if not checked:
+        return None
+    return 100 * (source.get("success_count") or 0) / checked
+
+
+def source_has_error(source: dict) -> bool:
+    return bool(source.get("last_error"))
+
+
+def source_matches_filter(source: dict, value: str) -> bool:
+    if value == "enabled":
+        return bool(source.get("enabled"))
+    if value == "disabled":
+        return not source.get("enabled")
+    if value == "errors":
+        return source_has_error(source)
+    return True
+
+
+def source_overview_rows(sources: list[dict], localtime) -> list[dict]:
+    return [
+        {
+            "来源": source["name"],
+            "启用配置": source_enabled_label(source.get("enabled")),
+            "上次采集状态": source_status_label(source.get("status")),
+            "最近采集成功": localtime(source.get("last_success_at")),
+            "最近内容发布": localtime(source.get("latest_published_at")),
+            "内容新鲜度": source_freshness_label(source.get("freshness_status")),
+            "入库文章": source.get("article_count", 0),
+        }
+        for source in sources
+    ]
+
+
+def source_diagnostic_rows(sources: list[dict], industry_names: dict, localtime) -> list[dict]:
+    rows = []
+    for source in sources:
+        industries = " / ".join(
+            industry_names.get(identity, identity) for identity in (source.get("industry_ids") or [])
+        )
+        trust = source.get("trust_level")
+        rows.append(
+            {
+                "来源 ID": source.get("id") or "—",
+                "来源": source.get("name") or "—",
+                "类型": source.get("source_type") or "—",
+                "URL": source.get("url") or "—",
+                "关联行业": industries or "—",
+                "语言": source.get("language") or "—",
+                "国家": source.get("country") or "—",
+                "优先度": source.get("priority"),
+                "可信度": float(trust) if trust is not None else None,
+                "启用配置": source_enabled_label(source.get("enabled")),
+                "原始状态": source.get("status") or "—",
+                "采集状态": source_status_label(source.get("status")),
+                "检查次数": source.get("checked_count", 0),
+                "成功次数": source.get("success_count", 0),
+                "连续失败次数": source.get("error_count", 0),
+                "成功率（%）": source_success_rate(source),
+                "更新间隔（分钟）": source.get("poll_interval_seconds", 0) // 60,
+                "最近检查": localtime(source.get("last_checked_at")),
+                "最近采集成功": localtime(source.get("last_success_at")),
+                "下次轮询": localtime(source.get("next_poll_at")),
+                "最近内容发布": localtime(source.get("latest_published_at")),
+                "内容新鲜度": source_freshness_label(source.get("freshness_status")),
+                "新鲜度原始值": source.get("freshness_status") or "—",
+                "入库文章": source.get("article_count", 0),
+                "内容年龄（天）": source.get("content_age_days"),
+                "推定日期": source.get("inferred_date_count", 0),
+                "未来日期异常": source.get("future_date_count", 0),
+                "最近错误": source.get("last_error") or "—",
+                "ETag": source.get("etag") or "—",
+                "Last-Modified": source.get("last_modified") or "—",
+                "创建时间": localtime(source.get("created_at")),
+                "更新时间": localtime(source.get("updated_at")),
+            }
+        )
+    return rows
+
+
 if show_heading:
     context_col, refresh_col = st.columns([6, 1], vertical_alignment="center")
     context_col.caption(
@@ -288,37 +406,47 @@ elif page == "行业管理":
 elif page == "数据源管理":
     sources = api("sources")
     st.caption(
-        "抓取正常只代表请求成功。下表另外显示库中最近的有效发布时间；超过7天仅提示内容较旧，不代表来源故障。"
+        "抓取成功只代表最近一次请求成功，不代表当前在线；内容新鲜度只反映库中发布时间，不代表来源故障。"
     )
-    st.dataframe(
-        [
-            {
-                "来源": source["name"],
-                "启用": source["enabled"],
-                "采集状态": source["status"],
-                "更新间隔（分钟）": source["poll_interval_seconds"] // 60,
-                "成功率": f"{source['success_count'] / source['checked_count']:.0%}"
-                if source["checked_count"]
-                else "尚未采集",
-                "最近采集成功": localtime(source["last_success_at"]) if source["last_success_at"] else "—",
-                "最近内容发布": localtime(source.get("latest_published_at"))
-                if source.get("latest_published_at")
-                else "—",
-                "内容新鲜度": {
-                    "recent": "7天内",
-                    "older_than_7_days": "超过7天",
-                    "unknown": "日期未知",
-                    "no_articles": "尚无文章",
-                }.get(source.get("freshness_status"), "未知"),
-                "入库文章": source.get("article_count", 0),
-                "推定日期": source.get("inferred_date_count", 0),
-                "未来日期异常": source.get("future_date_count", 0),
-                "最近错误": source["last_error"],
-            }
-            for source in sources
-        ],
-        use_container_width=True,
-    )
+    if sources:
+        total = len(sources)
+        enabled_count = sum(bool(source.get("enabled")) for source in sources)
+        error_count = sum(source_has_error(source) for source in sources)
+        a, b, c = st.columns(3)
+        a.metric("来源总数", total)
+        b.metric("已启用配置", enabled_count)
+        c.metric("当前有错误记录", error_count)
+        st.caption(
+            "统计基于全部来源；“当前有错误记录”指最近保留的错误信息，不代表连续失败次数；"
+            "列表筛选只影响下方表格，不改变编辑下拉、导入导出或来源配置。"
+        )
+        filter_value = st.radio(
+            "列表筛选",
+            SOURCE_FILTER_VALUES,
+            format_func=SOURCE_FILTER_LABELS.get,
+            horizontal=True,
+            key="source_list_filter",
+        )
+        filtered = [source for source in sources if source_matches_filter(source, filter_value)]
+        if filtered:
+            st.dataframe(
+                source_overview_rows(filtered, localtime),
+                use_container_width=True,
+                hide_index=True,
+            )
+            with st.expander("展开完整诊断表（成功率、间隔、错误、日期异常等）", expanded=False):
+                st.caption(
+                    "横向滚动查看全部字段；原始状态保留内部值，采集状态为最近一次请求结果的中文历史含义。"
+                )
+                st.dataframe(
+                    source_diagnostic_rows(filtered, industry_names, localtime),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+        else:
+            st.info("当前筛选没有来源。可切换筛选，或在下方新建来源。")
+    else:
+        st.info("尚无来源。可在下方新建来源，或导入 JSON。")
     export_fields = [
         "name",
         "source_type",
