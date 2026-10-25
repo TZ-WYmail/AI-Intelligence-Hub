@@ -20,6 +20,77 @@ STYLES = """<style>
 [data-testid=stMainBlockContainer]{max-width:1240px;padding-bottom:4rem}
 </style>"""
 
+READING_STATES = ["all", "unread", "saved", "read"]
+READING_LABELS = {"all": "全部", "unread": "未读", "saved": "我的收藏", "read": "已读"}
+SORT_OPTIONS = ["collected_at", "published_at", "importance_score"]
+SORT_LABELS = {
+    "collected_at": "最新发现",
+    "published_at": "最新发布",
+    "importance_score": "重要优先",
+}
+LANGUAGE_VALUES = ["", "zh", "en"]
+LANGUAGE_LABELS = {"": "全部语言", "zh": "中文", "en": "英文"}
+TIME_VALUES = [0, 1, 7, 30]
+TIME_LABELS = {0: "全部时间", 1: "最近 1 天", 7: "最近 7 天", 30: "最近 30 天"}
+ANALYSIS_STATUSES = ["all", "ai", "rules", "failed"]
+ANALYSIS_LABELS = {
+    "all": "全部",
+    "ai": "已有 AI 分析",
+    "rules": "暂无 AI 分析",
+    "failed": "AI 等待重试",
+}
+NEWS_CLEAR_DEFAULTS = {
+    "news_q": "",
+    "news_reading": "all",
+    "news_industry": "",
+    "news_source": "",
+    "news_language": "",
+    "news_days": 0,
+    "news_analysis": "all",
+}
+CLEAR_HELP = "清空搜索、行业、来源、语言、时间与分析状态并回到第 1 页；保留排序、紧凑列表、阅读设置和收藏。"
+
+
+def request_clear_filters() -> None:
+    """Defer the reset to the next run so no instantiated widget state is changed."""
+    st.session_state["_news_clear_filters"] = True
+
+
+def apply_pending_clear() -> None:
+    """Apply a requested clear before any filter widget is created."""
+    if not st.session_state.pop("_news_clear_filters", False):
+        return
+    for key, value in NEWS_CLEAR_DEFAULTS.items():
+        st.session_state[key] = value
+    st.session_state["_news_filters"] = {}
+    st.session_state.pop("_news_target_page", None)
+    st.session_state["_news_reset_page"] = True
+
+
+def filter_summary(
+    query: str,
+    reading: str,
+    industry: str,
+    source: str,
+    language: str,
+    days: int,
+    analysis: str,
+    industries: dict,
+    names: dict,
+) -> str:
+    keyword = f"「{snippet(query, 60)}」" if (query or "").strip() else "无"
+    return " · ".join(
+        [
+            f"关键词：{keyword}",
+            f"清单：{READING_LABELS.get(reading, '全部')}",
+            f"行业：{industries.get(industry, '未知行业') if industry else '全部行业'}",
+            f"来源：{names.get(source, '未知来源') if source else '全部来源'}",
+            f"语言：{LANGUAGE_LABELS.get(language, '全部语言')}",
+            f"时间：{TIME_LABELS.get(days, '全部时间')}",
+            f"分析：{ANALYSIS_LABELS.get(analysis, '全部')}",
+        ]
+    )
+
 
 def snippet(text: str, length: int) -> str:
     text = " ".join((text or "").split())
@@ -186,86 +257,113 @@ def render_reader(api, config: dict, names: dict, localtime) -> None:
 
 
 def render_news(api, config: dict, industries: dict, tz, localtime) -> None:
+    apply_pending_clear()
     st.markdown(STYLES, unsafe_allow_html=True)
     names = {source["id"]: source["name"] for source in api("sources")}
     if st.session_state.get("_reader"):
         render_reader(api, config, names, localtime)
         return
     saved = st.session_state.get("_news_filters", {})
+    initial = {
+        "news_q": saved.get("q", ""),
+        "news_reading": saved.get("reading_state", "all"),
+        "news_sort": saved.get("sort", "collected_at"),
+        "news_compact": saved.get("compact", False),
+        "news_industry": saved.get("industry_id", ""),
+        "news_source": saved.get("source_id", ""),
+        "news_language": saved.get("language", ""),
+        "news_days": saved.get("days", 0),
+        "news_analysis": saved.get("analysis_status", "all"),
+    }
+    for key, value in initial.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+    st.session_state["news_q"] = str(st.session_state["news_q"] or "")
+    if st.session_state["news_reading"] not in READING_STATES:
+        st.session_state["news_reading"] = "all"
+    if st.session_state["news_sort"] not in SORT_OPTIONS:
+        st.session_state["news_sort"] = "collected_at"
+    if not isinstance(st.session_state["news_compact"], bool):
+        st.session_state["news_compact"] = False
+    if st.session_state["news_industry"] not in ["", *industries]:
+        st.session_state["news_industry"] = ""
+    if st.session_state["news_source"] not in ["", *names]:
+        st.session_state["news_source"] = ""
+    if st.session_state["news_language"] not in LANGUAGE_VALUES:
+        st.session_state["news_language"] = ""
+    if st.session_state["news_days"] not in TIME_VALUES:
+        st.session_state["news_days"] = 0
+    if st.session_state["news_analysis"] not in ANALYSIS_STATUSES:
+        st.session_state["news_analysis"] = "all"
+
     query = st.text_input(
         "搜索原文 / 中文摘要 / 影响分析",
-        value=saved.get("q", ""),
+        key="news_q",
         placeholder="搜索企业、技术、政策或你关心的问题…",
     )
     a, b, c = st.columns([2, 1, 1])
-    collections = ["all", "unread", "saved", "read"]
     reading = a.radio(
         "阅读清单",
-        collections,
-        index=collections.index(saved.get("reading_state", "all")),
-        format_func=lambda value: {"all": "全部", "unread": "未读", "saved": "我的收藏", "read": "已读"}[
-            value
-        ],
+        READING_STATES,
+        key="news_reading",
+        format_func=READING_LABELS.get,
         horizontal=True,
     )
-    sort_options = ["collected_at", "published_at", "importance_score"]
     sort = b.selectbox(
         "排序",
-        sort_options,
-        index=sort_options.index(saved.get("sort", "collected_at")),
-        format_func=lambda value: {
-            "collected_at": "最新发现",
-            "published_at": "最新发布",
-            "importance_score": "重要优先",
-        }[value],
+        SORT_OPTIONS,
+        key="news_sort",
+        format_func=SORT_LABELS.get,
     )
-    compact = c.toggle("紧凑列表", value=saved.get("compact", False))
+    compact = c.toggle("紧凑列表", key="news_compact")
     with st.expander("筛选行业、来源和分析状态", expanded=False):
         a, b, c = st.columns(3)
         industry_values = [""] + list(industries)
         industry = a.selectbox(
             "行业",
             industry_values,
-            index=industry_values.index(saved.get("industry_id", ""))
-            if saved.get("industry_id", "") in industry_values
-            else 0,
+            key="news_industry",
             format_func=lambda value: industries.get(value, "全部行业"),
         )
         source_values = [""] + list(names)
         source = b.selectbox(
             "来源",
             source_values,
-            index=source_values.index(saved.get("source_id", ""))
-            if saved.get("source_id", "") in source_values
-            else 0,
+            key="news_source",
             format_func=lambda value: names.get(value, "全部来源"),
         )
-        langs = ["", "zh", "en"]
         language = c.selectbox(
             "语言",
-            langs,
-            index=langs.index(saved.get("language", "")),
-            format_func=lambda value: {"": "全部语言", "zh": "中文", "en": "英文"}[value],
+            LANGUAGE_VALUES,
+            key="news_language",
+            format_func=LANGUAGE_LABELS.get,
         )
         a, b = st.columns(2)
         days = a.selectbox(
             "发布时间范围",
-            [0, 1, 7, 30],
-            index=[0, 1, 7, 30].index(saved.get("days", 0)),
-            format_func=lambda value: "全部时间" if value == 0 else f"最近 {value} 天",
+            TIME_VALUES,
+            key="news_days",
+            format_func=TIME_LABELS.get,
         )
-        statuses = ["all", "ai", "rules", "failed"]
         analysis = b.selectbox(
             "分析状态",
-            statuses,
-            index=statuses.index(saved.get("analysis_status", "all")),
-            format_func=lambda value: {
-                "all": "全部",
-                "ai": "已有 AI 分析",
-                "rules": "暂无 AI 分析",
-                "failed": "AI 等待重试",
-            }[value],
+            ANALYSIS_STATUSES,
+            key="news_analysis",
+            format_func=ANALYSIS_LABELS.get,
         )
+    summary_col, clear_col = st.columns([5, 1], vertical_alignment="center")
+    summary_col.caption(
+        "当前筛选："
+        + filter_summary(query, reading, industry, source, language, days, analysis, industries, names)
+    )
+    clear_col.button(
+        "清空筛选",
+        key="news_clear",
+        on_click=request_clear_filters,
+        help=CLEAR_HELP,
+        width="stretch",
+    )
     filters = {
         "q": query,
         "reading_state": reading,
@@ -298,7 +396,13 @@ def render_news(api, config: dict, industries: dict, tz, localtime) -> None:
         st.rerun()
     st.caption(f"{data['total']} 篇文章 · 第 {page} / {pages} 页 · 打开文章后自动保存已读状态")
     if not data["items"]:
-        st.info("当前清单没有文章。可以切换清单或调整筛选条件。")
+        st.info("当前筛选没有匹配文章。可以检查关键词或时间范围，或直接清空筛选。")
+        st.button(
+            "清空筛选",
+            key="news_clear_empty",
+            on_click=request_clear_filters,
+            help=CLEAR_HELP,
+        )
     ids = [item["id"] for item in data["items"]]
     for item in data["items"]:
         with st.container(border=True):
