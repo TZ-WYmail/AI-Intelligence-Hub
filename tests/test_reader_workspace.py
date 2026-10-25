@@ -98,3 +98,42 @@ def test_reader_prose_escapes_untrusted_markup():
         markup = render.call_args.args[0]
         assert "<script>" not in markup and "<img" not in markup
         assert "&lt;script&gt;" in markup
+
+
+def test_news_card_escapes_untrusted_text_and_keeps_summary_labels():
+    from dashboard.news import news_card_html
+
+    item = {
+        "id": "card",
+        "title": '<img src="https://attacker.example/x" onerror="alert(1)">',
+        "summary": "<script>alert(1)</script> source summary",
+        "ai_summary_zh": None,
+        "source_id": "source",
+        "published_at": "2026-10-25T10:00:00+00:00",
+        "importance_score": 85,
+        "industry_ids": ["ai"],
+        "bookmarked": True,
+        "read_at": None,
+    }
+    names = {"source": "<i>Source</i>"}
+    industries = {"ai": "<b>Industry</b>"}
+    markup = news_card_html(item, names, industries, lambda _: "10-25 10:00")
+    assert "<script>" not in markup and "<img" not in markup
+    assert "<i>" not in markup and "<b>Industry</b>" not in markup
+    assert "&lt;script&gt;" in markup and "&lt;img" in markup
+    assert "来源摘要" in markup and "未核验" in markup and "重要性 85" in markup
+    assert "★ 收藏" in markup and "未读" in markup
+
+    ai_markup = news_card_html(
+        {**item, "ai_summary_zh": "<b>AI summary</b>"},
+        names,
+        industries,
+        lambda _: "10-25 10:00",
+    )
+    assert "AI 中文摘要" in ai_markup
+    assert "&lt;b&gt;AI summary&lt;/b&gt;" in ai_markup
+
+    compact = news_card_html(item, names, industries, lambda _: "10-25 10:00", compact=True)
+    assert "来源摘要" not in compact
+    assert "重要性 85" in compact
+    assert "Source" in compact and "&lt;img" in compact

@@ -10,15 +10,30 @@ from datetime import datetime, timedelta
 import streamlit as st
 
 STYLES = """<style>
-.news-title {font-size:1.23rem;font-weight:600;line-height:1.5;margin:8px 0 10px;overflow-wrap:anywhere;color:#e9eef7}
-.news-excerpt {font-size:.96rem;line-height:1.85;color:#bcc9da;overflow-wrap:anywhere;white-space:pre-wrap}
-.news-meta {font-size:.78rem;color:#91a4bc;line-height:1.7}
+.news-top {display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .55rem;margin:0 0 .55rem;font-size:.78rem;line-height:1.6;color:var(--aih-muted)}
+.news-source {color:var(--aih-text);font-weight:600;overflow-wrap:anywhere;max-width:100%}
+.news-time {white-space:nowrap;color:var(--aih-muted)}
+.news-badge {display:inline-flex;align-items:center;max-width:100%;padding:.06rem .48rem;border:1px solid var(--aih-border);border-radius:999px;background:var(--aih-surface);color:var(--aih-muted);font-size:.72rem;line-height:1.5;overflow-wrap:anywhere}
+.news-badge-state {color:var(--aih-accent);border-color:rgba(98,223,199,.35);background:rgba(98,223,199,.10)}
+.news-badge-score {color:var(--aih-text);background:var(--aih-panel)}
+.news-badge-unverified {color:#ffc575;border-color:rgba(255,197,117,.35);background:rgba(255,197,117,.08)}
+.news-title {font-size:1.23rem;font-weight:600;line-height:1.5;margin:0 0 .25rem;overflow-wrap:anywhere;word-break:break-word;color:var(--aih-text-strong)}
+.news-industries {display:flex;flex-wrap:wrap;gap:.35rem;margin:.1rem 0 .2rem}
+.news-industry {max-width:100%;padding:.08rem .48rem;border:1px solid var(--aih-border);border-radius:999px;background:var(--aih-surface);color:var(--aih-muted);font-size:.74rem;line-height:1.55;overflow-wrap:anywhere}
+.news-summary-label {margin:.75rem 0 .15rem;font-size:.74rem;font-weight:600;letter-spacing:.02em;color:var(--aih-accent)}
+.news-summary-label.source {color:var(--aih-muted)}
+.news-excerpt {font-size:.96rem;line-height:1.8;color:var(--aih-text);overflow-wrap:anywhere;white-space:pre-wrap}
 .reader-title {font-size:clamp(1.6rem,3vw,2.3rem);font-weight:650;line-height:1.45;margin:18px 0;color:#f1f5fc;overflow-wrap:anywhere}
 .reading-prose {line-height:1.95;color:#dce5f2;white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0 22px}
 .reader-section {font-size:1.08rem;font-weight:650;letter-spacing:.02em;margin:26px 0 10px;color:#71d9c2}
 .reader-fact {padding:12px 18px;margin:12px 0;border-left:3px solid #4fb6a1;background:#13232d;border-radius:0 8px 8px 0}
+[class*="st-key-aih-card-news-"] [data-testid="stButton"] button {background:var(--aih-accent);border-color:var(--aih-accent);color:#07231d;font-weight:700}
+[class*="st-key-aih-card-news-"] [data-testid="stButton"] button:hover {background:var(--aih-accent-strong);border-color:var(--aih-accent-strong);color:#041713}
 [data-testid=stMainBlockContainer]{max-width:1240px;padding-bottom:4rem}
 </style>"""
+
+CARD_KEY_PREFIX = "aih-card-news-"
+
 
 READING_STATES = ["all", "unread", "saved", "read"]
 READING_LABELS = {"all": "全部", "unread": "未读", "saved": "我的收藏", "read": "已读"}
@@ -97,6 +112,43 @@ def snippet(text: str, length: int) -> str:
     if len(text) <= length:
         return text
     return text[:length].rstrip() + "…"
+
+
+def news_card_html(item: dict, names: dict, industries: dict, localtime, *, compact: bool = False) -> str:
+    """Static card content; every external text value is escaped before HTML."""
+    source = str(names.get(item["source_id"], "来源"))
+    published = str(localtime(item["published_at"]))
+    industry_names = [str(industries.get(value, "未知行业")) for value in (item.get("industry_ids") or [])]
+    state = []
+    if item.get("bookmarked"):
+        state.append('<span class="news-badge news-badge-state">★ 收藏</span>')
+    state.append(f'<span class="news-badge">{"已读" if item.get("read_at") else "未读"}</span>')
+    industry_html = "".join(
+        f'<span class="news-industry">{html.escape(name)}</span>' for name in industry_names
+    )
+    score = html.escape(str(item.get("importance_score", 0)))
+    parts = [
+        '<div class="news-top">',
+        f'<span class="news-source">{html.escape(source)}</span>',
+        f'<span class="news-time">{html.escape(published)}</span>',
+        *state,
+        f'<span class="news-badge news-badge-score" title="仅表示重要程度，不代表可信度">重要性 {score}</span>',
+        '<span class="news-badge news-badge-unverified">未核验</span>',
+        "</div>",
+        f'<div class="news-title">{html.escape(str(item.get("title") or ""))}</div>',
+    ]
+    if industry_html:
+        parts.append(f'<div class="news-industries">{industry_html}</div>')
+    if not compact:
+        ai_summary = str(item.get("ai_summary_zh") or "").strip()
+        source_summary = str(item.get("summary") or "").strip()
+        has_ai = bool(ai_summary)
+        summary = ai_summary if has_ai else (source_summary or "来源仅提供标题，阅读原文了解详情。")
+        label = "AI 中文摘要" if has_ai else "来源摘要"
+        label_class = "" if has_ai else " source"
+        parts.append(f'<div class="news-summary-label{label_class}">{label}</div>')
+        parts.append(f'<div class="news-excerpt">{html.escape(snippet(summary, 220))}</div>')
+    return "".join(parts)
 
 
 def reading_minutes(text: str) -> int:
@@ -395,6 +447,7 @@ def render_news(api, config: dict, industries: dict, tz, localtime) -> None:
         st.session_state["_news_reset_page"] = True
         st.rerun()
     st.caption(f"{data['total']} 篇文章 · 第 {page} / {pages} 页 · 打开文章后自动保存已读状态")
+    st.caption("重要性分值只表示重要程度，不代表可信度；AI 中文摘要与来源摘要均保留未核验标识。")
     if not data["items"]:
         st.info("当前筛选没有匹配文章。可以检查关键词或时间范围，或直接清空筛选。")
         st.button(
@@ -405,27 +458,20 @@ def render_news(api, config: dict, industries: dict, tz, localtime) -> None:
         )
     ids = [item["id"] for item in data["items"]]
     for item in data["items"]:
-        with st.container(border=True):
-            markers = ("★ 收藏 · " if item.get("bookmarked") else "") + (
-                "已读" if item.get("read_at") else "未读"
-            )
-            labels = " / ".join(industries.get(value, value) for value in item["industry_ids"])
+        with st.container(border=True, key=CARD_KEY_PREFIX + item["id"]):
             st.markdown(
-                f'<div class="news-meta">{html.escape(markers)} · {item["importance_score"]} 分 · {html.escape(names.get(item["source_id"], "来源"))} · {localtime(item["published_at"])} · {html.escape(labels)}</div>',
+                news_card_html(item, names, industries, localtime, compact=compact),
                 unsafe_allow_html=True,
             )
-            st.markdown(f'<div class="news-title">{html.escape(item["title"])}</div>', unsafe_allow_html=True)
-            if not compact:
-                text = item.get("ai_summary_zh") or item["summary"]
-                st.markdown(
-                    f'<div class="news-excerpt">{html.escape(snippet(text, 220) or "来源仅提供标题，阅读原文了解详情。")}</div>',
-                    unsafe_allow_html=True,
-                )
-            a, b = st.columns([2, 1])
-            if a.button("开始阅读", key="detail_" + item["id"]):
+            action, _ = st.columns([1, 2])
+            if action.button(
+                "开始阅读",
+                key="detail_" + item["id"],
+                type="primary",
+                width="stretch",
+            ):
                 open_article(item["id"], ids)
                 st.rerun()
-            b.caption("AI 中文摘要 · 未核验" if item.get("ai_summary_zh") else "来源摘要")
     a, b, c = st.columns([1, 2, 1])
     if a.button("← 上一页", disabled=page <= 1, use_container_width=True):
         st.session_state["_news_target_page"] = page - 1
